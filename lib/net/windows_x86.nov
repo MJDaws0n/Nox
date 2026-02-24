@@ -1,0 +1,314 @@
+// ---------------------------------------------------------------------------
+// net/windows_x86 - TCP networking for Windows x86 (32-bit)
+// Uses Winsock2 API: WSAStartup, socket, bind, listen, accept, connect,
+// send, recv, closesocket, WSACleanup.
+// ---------------------------------------------------------------------------
+
+module net_windows_x86;
+
+import ../std;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn to_u8_net(v: i32) -> i32 {
+    return ((v % 256) + 256) % 256;
+}
+
+fn net_make_buf(size: i32) -> str {
+    let buf: str = "";
+    let i: i32 = 0;
+    while (i < size) { buf = buf + "\0"; i = i + 1; }
+    return buf;
+}
+
+fn net_write_i32_le(buf: str, offset: i32, val: i32) -> void {
+    let v: i32 = val;
+    let i: i32 = 0;
+    while (i < 4) {
+        buf[offset + i] = to_u8_net(v % 256);
+        v = v / 256;
+        i = i + 1;
+    }
+}
+
+fn net_write_i16_be(buf: str, offset: i32, val: i32) -> void {
+    buf[offset] = to_u8_net(val / 256);
+    buf[offset + 1] = to_u8_net(val % 256);
+}
+
+// ---------------------------------------------------------------------------
+// Winsock initialization
+// ---------------------------------------------------------------------------
+
+fn net_wsa_startup() -> i32 {
+    // WSADATA: 400 bytes on x86
+    let wsadata: str = "";
+    let i: i32 = 0;
+    while (i < 400) { wsadata = wsadata + "\0"; i = i + 1; }
+    win_call("WSAStartup", 514, wsadata);
+    let rc: u64 = getreg(eax);
+    if (rc != 0) { return -1; }
+    return 0;
+}
+
+fn net_wsa_cleanup() -> void {
+    win_call("WSACleanup");
+}
+
+// ---------------------------------------------------------------------------
+// sockaddr_in struct (16 bytes)
+// ---------------------------------------------------------------------------
+
+fn make_sockaddr_in(port: i32) -> str {
+    let buf: str = "";
+    let i: i32 = 0;
+    while (i < 16) { buf = buf + "\0"; i = i + 1; }
+    buf[0] = to_u8_net(2);  // AF_INET
+    buf[1] = 0;
+    buf[2] = to_u8_net(port / 256);
+    buf[3] = to_u8_net(port % 256);
+    return buf;
+}
+
+fn make_sockaddr_in_addr(a: i32, b: i32, c: i32, d: i32, port: i32) -> str {
+    let buf: str = make_sockaddr_in(port);
+    buf[4] = to_u8_net(a);
+    buf[5] = to_u8_net(b);
+    buf[6] = to_u8_net(c);
+    buf[7] = to_u8_net(d);
+    return buf;
+}
+
+// ---------------------------------------------------------------------------
+// Socket creation
+// ---------------------------------------------------------------------------
+
+fn net_socket() -> i32 {
+    win_call("socket", 2, 1, 0);
+    let fd: u64 = getreg(eax);
+    let invalid: u64 = 4294967295;
+    if (fd == invalid) { return -1; }
+    return u64_to_i32(fd);
+}
+
+// ---------------------------------------------------------------------------
+// Socket options
+// ---------------------------------------------------------------------------
+
+fn net_set_reuse(fd: i32) -> i32 {
+    let one: i32 = 1;
+    let one_addr: u64 = &one;
+    win_call("setsockopt", fd, 65535, 4, one_addr, 4);
+    return u64_to_i32(getreg(eax));
+}
+
+fn net_set_nosigpipe(fd: i32) -> i32 {
+    return 0;
+}
+
+fn net_set_nonblock(fd: i32) -> i32 {
+    let mode: i32 = 1;
+    let mode_addr: u64 = &mode;
+    win_call("ioctlsocket", fd, 2147772030, mode_addr);
+    return u64_to_i32(getreg(eax));
+}
+
+fn net_set_keepalive(fd: i32) -> i32 {
+    let one: i32 = 1;
+    let one_addr: u64 = &one;
+    win_call("setsockopt", fd, 65535, 8, one_addr, 4);
+    return u64_to_i32(getreg(eax));
+}
+
+// ---------------------------------------------------------------------------
+// Bind / Listen / Accept
+// ---------------------------------------------------------------------------
+
+fn net_bind(fd: i32, port: i32) -> i32 {
+    let addr: str = make_sockaddr_in(port);
+    win_call("bind", fd, addr, 16);
+    return u64_to_i32(getreg(eax));
+}
+
+fn net_listen(fd: i32, backlog: i32) -> i32 {
+    win_call("listen", fd, backlog);
+    return u64_to_i32(getreg(eax));
+}
+
+fn net_accept(fd: i32) -> i32 {
+    win_call("accept", fd, 0, 0);
+    let client: u64 = getreg(eax);
+    let invalid: u64 = 4294967295;
+    if (client == invalid) { return -1; }
+    return u64_to_i32(client);
+}
+
+// ---------------------------------------------------------------------------
+// Connect
+// ---------------------------------------------------------------------------
+
+fn net_connect(fd: i32, a: i32, b: i32, c: i32, d: i32, port: i32) -> i32 {
+    let addr: str = make_sockaddr_in_addr(a, b, c, d, port);
+    win_call("connect", fd, addr, 16);
+    return u64_to_i32(getreg(eax));
+}
+
+fn net_connect_local(port: i32) -> i32 {
+    net_wsa_startup();
+    let fd: i32 = net_socket();
+    if (fd < 0) { return -1; }
+    let rc: i32 = net_connect(fd, 127, 0, 0, 1, port);
+    if (rc != 0) {
+        net_close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+// ---------------------------------------------------------------------------
+// Read / Write
+// ---------------------------------------------------------------------------
+
+fn net_read(fd: i32, buf: str, max_len: i32) -> i32 {
+    win_call("recv", fd, buf, max_len, 0);
+    return u64_to_i32(getreg(eax));
+}
+
+fn net_read_safe(fd: i32, buf: str, max_len: i32) -> i32 {
+    let avail: i32 = net_bytes_available(fd);
+    if (avail <= 0) {
+        let alive: i32 = net_poll_read(fd, 0);
+        if (alive < 0) { return -1; }
+        if (alive == 0) { return 0; }
+        return -1;
+    }
+    let to_read: i32 = max_len;
+    if (to_read > avail) { to_read = avail; }
+    win_call("recv", fd, buf, to_read, 0);
+    let nr: i32 = u64_to_i32(getreg(eax));
+    if (nr > 0 && nr <= to_read) { return nr; }
+    return -1;
+}
+
+fn net_write(fd: i32, data: str, length: i32) -> i32 {
+    win_call("send", fd, data, length, 0);
+    return u64_to_i32(getreg(eax));
+}
+
+fn net_write_str(fd: i32, s: str) -> i32 {
+    return net_write(fd, s, len(s));
+}
+
+fn net_write_line(fd: i32, s: str) -> i32 {
+    let line: str = s + "\n";
+    return net_write(fd, line, len(line));
+}
+
+// ---------------------------------------------------------------------------
+// Close
+// ---------------------------------------------------------------------------
+
+fn net_close(fd: i32) -> void {
+    win_call("closesocket", fd);
+}
+
+fn net_shutdown(fd: i32, how: i32) -> i32 {
+    win_call("shutdown", fd, how);
+    return u64_to_i32(getreg(eax));
+}
+
+// ---------------------------------------------------------------------------
+// Poll & status
+// ---------------------------------------------------------------------------
+
+fn net_poll_read(fd: i32, timeout_ms: i32) -> i32 {
+    // WSAPOLLFD on x86: fd(4 bytes SOCKET) + events(2) + revents(2) = 8 bytes
+    let pfd: str = "\0\0\0\0\0\0\0\0";
+    pfd[0] = to_u8_net(fd % 256);
+    pfd[1] = to_u8_net((fd / 256) % 256);
+    pfd[2] = to_u8_net((fd / 65536) % 256);
+    pfd[3] = to_u8_net((fd / 16777216) % 256);
+    pfd[4] = to_u8_net(1);   // POLLIN
+    pfd[5] = to_u8_net(0);
+
+    win_call("WSAPoll", pfd, 1, timeout_ms);
+    let ret: i32 = u64_to_i32(getreg(eax));
+    if (ret <= 0) { return ret; }
+
+    let revents: i32 = (pfd[6] & 255) + ((pfd[7] & 255) * 256);
+    if ((revents & 1) == 0) { return -1; }
+    return ret;
+}
+
+fn net_bytes_available(fd: i32) -> i32 {
+    let count: i32 = 0;
+    let count_addr: u64 = &count;
+    win_call("ioctlsocket", fd, 1074030207, count_addr);
+    return count;
+}
+
+// ---------------------------------------------------------------------------
+// Signal handling (no-op on Windows)
+// ---------------------------------------------------------------------------
+
+fn net_ignore_sigpipe() -> void {
+    // No-op
+}
+
+// ---------------------------------------------------------------------------
+// High-level server helpers
+// ---------------------------------------------------------------------------
+
+fn net_listen_on(port: i32, backlog: i32) -> i32 {
+    net_wsa_startup();
+    let fd: i32 = net_socket();
+    if (fd < 0) { return -1; }
+    net_set_reuse(fd);
+    let rc: i32 = net_bind(fd, port);
+    if (rc != 0) { net_close(fd); return -1; }
+    rc = net_listen(fd, backlog);
+    if (rc != 0) { net_close(fd); return -1; }
+    return fd;
+}
+
+fn net_read_line(fd: i32, max_len: i32) -> str {
+    let buf: str = "\0";
+    let out: str = "";
+    let pos: i32 = 0;
+    while (pos < max_len) {
+        win_call("recv", fd, buf, 1, 0);
+        let nread: i32 = u64_to_i32(getreg(eax));
+        if (nread <= 0) { break; }
+        if (buf[0] == '\n') { break; }
+        if (buf[0] == '\r') {
+            // skip
+        } else {
+            out = out + buf[0];
+        }
+        pos = pos + 1;
+    }
+    return out;
+}
+
+fn net_read_all(fd: i32, max_len: i32) -> str {
+    let buf: str = net_make_buf(max_len);
+    let total: i32 = 0;
+    let result: str = "";
+    while (total < max_len) {
+        let avail: i32 = net_poll_read(fd, 100);
+        if (avail <= 0) { break; }
+        let remaining: i32 = max_len - total;
+        win_call("recv", fd, buf, remaining, 0);
+        let nr: i32 = u64_to_i32(getreg(eax));
+        if (nr <= 0) { break; }
+        let i: i32 = 0;
+        while (i < nr) {
+            result = result + buf[i];
+            i = i + 1;
+        }
+        total = total + nr;
+    }
+    return result;
+}
