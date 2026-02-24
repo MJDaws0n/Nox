@@ -983,9 +983,7 @@ fn init_project() -> i32 {
         let t: str = "";
         t = t + "module my_project;\n";
         t = t + "\n";
-        t = t + "import lib/novus-std/lib/standard_lib;\n";
-        t = t + "import lib/novus-std/lib/standard_lib_macos_silicon;\n";
-        t = t + "import lib/novus-std/lib/memory;\n";
+        t = t + "import lib/std;\n";
         t = t + "\n";
         t = t + "fn main() -> i32 {\n";
         t = t + "    print(\"hello, world!\");\n";
@@ -998,17 +996,8 @@ fn init_project() -> i32 {
 
     let conf: str = ensure_manifest_exists();
 
-    // fresh project: auto-install standard libraries if no packages listed
-    if (len(conf_get_installed(conf)) == 0 && !file_exists("lib/novus-std")) {
-        print("installing standard libraries (novus-std)...");
-        let registry: str = fetch_registry();
-        let url: str = registry_lookup(registry, "novus-std");
-        if (len(url) == 0) {
-            url = "https://github.com/MJDaws0n/Novus";
-        }
-        let st: i32 = pull_package(url, "novus-std", true, "", "", "");
-        if (st != 0) { return st; }
-    } else {
+    // install any missing packages from libraries.conf
+    if (len(conf_get_installed(conf)) > 0) {
         conf = install_missing_packages(load_conf(), true);
         save_conf(conf);
     }
@@ -1060,6 +1049,16 @@ fn show_help() -> void {
     print("  -v <version>                   pull a specific version from the registry");
     print("  -b <branch>                    clone a specific branch");
     print("  -c <commit>                    checkout a specific commit after cloning");
+    print("");
+    print("bundled libraries (already in lib/):");
+    print("  std        core types, print, exit, input, strings, memory");
+    print("  file_io    read/write files, paths, directories, mmap");
+    print("  process    run commands, capture output, shell, file pickers");
+    print("  maths      abs, min, max, pow, gcd, lcm, sqrt, fibonacci");
+    print("  net        TCP sockets: bind, listen, connect, read, write");
+    print("  time       sleep, timestamps, timers, duration formatting");
+    print("  env        getcwd, getpid, getenv, hostname, os info");
+    print("  window     macOS WebKit window manager (darwin only)");
     print("");
     print("examples:");
     print("  nox pull golemmc");
