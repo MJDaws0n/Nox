@@ -12,6 +12,15 @@ The package manager for the [Novus](https://github.com/MJDaws0n/Novus) programmi
  the novus package manager
 ```
 
+## Quick install
+1. Download the latest from the realeases tab
+2. Run the following command to install gobally (replace nox with the directy of the executable)
+    ```sh
+    sudo cp "nox" /usr/local/bin/nox
+    sudo chmod +x /usr/local/bin/nox
+    ```
+3. Run `nox help` to get started
+
 ## Quick Start
 
 ```bash
