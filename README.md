@@ -89,25 +89,139 @@ import lib/maths/main;
 
 ## Library Structure
 
-Nox libraries use a folder-based structure with platform-specific implementations:
+Nox's bundled libraries use a folder-based structure with platform-specific implementations:
 
 ```
 lib/
 ├── std/                         ← standard library
 │   ├── main.nov                 ← loader (imports core + platform files)
-│   ├── core.nov                 ← cross-platform: len, str_to_i32, etc.
-│   ├── strings.nov              ← cross-platform: starts_with, substr, etc.
+│   ├── core.nov                 ← cross-platform: len, str_to_i32, bool_to_str, etc.
+│   ├── strings.nov              ← cross-platform: starts_with, substr, str_replace, str_upper, etc.
 │   ├── darwin_arm64.nov         ← macOS ARM64: print, exit, fork, etc.
-│   └── memory_darwin_arm64.nov  ← macOS ARM64: buffers, argv, cstr
+│   └── memory_darwin_arm64.nov  ← macOS ARM64: buffers, store8, argv, cstr
 ├── file_io/
 │   ├── main.nov                 ← loader
-│   └── darwin_arm64.nov         ← macOS ARM64: file ops, paths, dirs
-└── process/
+│   └── darwin_arm64.nov         ← macOS ARM64: file ops, paths, dirs, mmap
+├── process/
+│   ├── main.nov                 ← loader
+│   └── darwin_arm64.nov         ← macOS ARM64: run_cmd, capture_output, shell_exec, pick_file_dialog
+├── maths/
+│   ├── main.nov                 ← loader
+│   └── core.nov                 ← cross-platform: abs, min, max, pow, gcd, lcm, sqrt, fibonacci
+├── net/
+│   ├── main.nov                 ← loader
+│   └── darwin_arm64.nov         ← macOS ARM64: TCP sockets, bind, listen, connect, read, write
+├── window/
+│   ├── main.nov                 ← loader
+│   └── darwin_arm64.nov         ← macOS ARM64: WebKit window manager via UNIX domain socket
+├── time/
+│   ├── main.nov                 ← loader
+│   └── darwin_arm64.nov         ← macOS ARM64: sleep_ms, get_time_ms, timer helpers
+└── env/
     ├── main.nov                 ← loader
-    └── darwin_arm64.nov         ← macOS ARM64: run_cmd, capture_output
+    └── darwin_arm64.nov         ← macOS ARM64: getcwd, getpid, getenv, gethostname
 ```
 
 To add Windows or Linux support, add new platform files (e.g. `windows_amd64.nov`) alongside the existing ones.
+
+### Bundled Library Reference
+
+<details>
+<summary><strong>std</strong> — standard library (core types, strings, memory)</summary>
+
+**core.nov** (cross-platform)
+- `len(s) → i32`, `str_repeat(s, n) → str`, `char_eq(s, idx, ch) → bool`
+- `str_to_i32(s) → i32`, `str_to_i64(s) → i64`, `int_to_str(n) → str`, `i32_to_str(n) → str`, `i64_to_str(n) → str`
+- `u64_to_i32(n) → i32`, `bool_to_str(b) → str`, `str_to_bool(s) → bool`, `to_u8(v) → i32`
+
+**strings.nov** (cross-platform)
+- `starts_with`, `ends_with`, `str_contains`, `str_find`, `str_last_find`
+- `substr`, `substr_len`, `str_count`, `str_replace`, `str_replace_first`
+- `str_trim`, `str_trim_left`, `str_trim_right`, `str_upper`, `str_lower`, `str_reverse`
+- `str_pad_left`, `str_pad_right`, `str_equals`, `str_split_first`, `str_split_rest`
+- `str_is_empty`, `str_is_blank`, `int_to_hex`
+- `is_digit`, `is_alpha`, `is_alnum`, `is_space`, `is_upper`, `is_lower`
+
+**memory_darwin_arm64.nov** (macOS ARM64)
+- `make_buffer`, `copy_bytes_raw`, `copy_bytes`, `cstr_to_str`, `byte_at`, `argv_get`
+- `store8`, `store32`, `memset`
+</details>
+
+<details>
+<summary><strong>file_io</strong> — file system operations</summary>
+
+- `file_open`, `file_open_read`, `file_open_write`, `file_close`
+- `file_read`, `file_write`, `file_write_str`, `file_seek`, `file_size`
+- `file_mmap_read`, `file_munmap`
+- `read_file`, `write_file`, `file_append`, `file_copy`
+- `file_exists`, `file_delete`, `file_rename`, `file_chdir`
+- `pipe_create`, `dup2`, `sys_mkdir`, `sys_chmod`, `mkdirp`, `dir_exists`
+- `path_ext`, `path_stem`, `path_dir`, `path_basename`, `path_insert_suffix`, `path_ext_no_dot`, `path_join`
+</details>
+
+<details>
+<summary><strong>process</strong> — process & subprocess management</summary>
+
+- `wait_pid`, `capture_output`, `capture_output_full`, `run_cmd`
+- `shell_exec(cmd) → i32` — run a shell command via `/bin/sh -c`
+- `shell_output(cmd, max_len) → str` — run a shell command and capture output
+- `pick_file_dialog(file_type) → str` — macOS file picker via osascript
+- `pick_folder_dialog() → str` — macOS folder picker via osascript
+</details>
+
+<details>
+<summary><strong>maths</strong> — mathematical functions (cross-platform)</summary>
+
+- `is_even`, `is_odd`, `is_prime`
+- `abs`, `abs64`, `max`, `min`, `max64`, `min64`
+- `clamp`, `clamp64`, `sign`, `sign64`
+- `pow_i32`, `pow_i64`, `factorial`, `fibonacci`
+- `gcd`, `lcm`, `div_ceil`, `wrap`, `map_range`
+- `isqrt`, `digit_sum`, `digit_count`, `lerp`
+</details>
+
+<details>
+<summary><strong>net</strong> — TCP networking (macOS ARM64)</summary>
+
+- `net_socket`, `net_close`, `net_shutdown`
+- `net_set_reuse`, `net_set_nosigpipe`, `net_set_nonblock`, `net_set_keepalive`
+- `net_bind`, `net_listen`, `net_accept` — server-side
+- `net_connect`, `net_connect_local` — client-side
+- `net_read`, `net_read_safe`, `net_write`, `net_write_str`, `net_write_line`
+- `net_poll_read`, `net_bytes_available`, `net_ignore_sigpipe`
+- `net_listen_on(port, backlog)` — high-level: create, bind, listen in one call
+- `net_read_line`, `net_read_all`
+- `make_sockaddr_in`, `make_sockaddr_in_addr`, `net_make_buf`
+</details>
+
+<details>
+<summary><strong>window</strong> — macOS window manager (WebKit via UNIX socket)</summary>
+
+- `wm_open(title, exe_path, sock_path)`, `wm_open_default(title)`
+- `wm_title`, `wm_show`, `wm_hide`, `wm_resize`, `wm_ping`, `wm_quit`
+- `wm_serve(fd, root_dir)`, `wm_navigate(fd, url)`, `wm_jseval(fd, code)`
+- `wm_send_to_js`, `wm_recv_js_msg`, `wm_parse_port`
+- `wm_open_serve(title, root_dir, index_path)` — convenience: open + serve + navigate
+- `wm_escape_arg`, `wm_unescape_arg`, `wm_escape_js`
+</details>
+
+<details>
+<summary><strong>time</strong> — time and sleep utilities (macOS ARM64)</summary>
+
+- `sleep_ms(ms)`, `sleep_s(seconds)`
+- `get_time_ms()`, `get_time_us()`, `get_time_s()`
+- `elapsed_ms(start_ns, end_ns)`, `elapsed_us(start_ns, end_ns)`
+- `timer_start()`, `timer_elapsed_ms(start)`, `timer_elapsed_us(start)`, `timer_elapsed_s(start)`
+- `format_duration_ms(ms) → str`
+</details>
+
+<details>
+<summary><strong>env</strong> — environment & system info (macOS ARM64)</summary>
+
+- `getcwd()`, `getpid()`, `getppid()`, `getuid()`, `geteuid()`
+- `getenv(name)`, `gethostname()`
+- `get_home_dir()`, `get_username()`, `get_os_name()`, `get_os_version()`, `get_arch()`
+</details>
 
 ## libraries.conf
 

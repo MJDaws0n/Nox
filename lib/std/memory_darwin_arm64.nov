@@ -94,3 +94,51 @@ fn argv_get(argv: u64, index: i32) -> str {
     let addr: u64 = i64_to_u64(load64(argv + offset));
     return cstr_to_str(addr);
 }
+
+// Write a single byte to a raw memory address using the pipe trick
+fn store8(addr: u64, val: i32) -> void {
+    let tmp: str = "\0";
+    tmp[0] = ((val % 256) + 256) % 256;
+
+    mov(x16, 0x200002A);   // SYS_pipe
+    syscall();
+    let rfd: i32 = u64_to_i32(getreg(x0));
+    let wfd: i32 = u64_to_i32(getreg(x1));
+
+    mov(x0, wfd);
+    mov(x1, tmp);
+    mov(x2, 1);
+    mov(x16, 0x2000004);   // SYS_write
+    syscall();
+
+    mov(x0, wfd);
+    mov(x16, 0x2000006);   // SYS_close
+    syscall();
+
+    mov(x0, rfd);
+    mov(x1, addr);
+    mov(x2, 1);
+    mov(x16, 0x2000003);   // SYS_read
+    syscall();
+
+    mov(x0, rfd);
+    mov(x16, 0x2000006);   // SYS_close
+    syscall();
+}
+
+// Write a 32-bit value to a raw memory address (little-endian)
+fn store32(addr: u64, val: i32) -> void {
+    store8(addr, val % 256);
+    store8(addr + 1, (val / 256) % 256);
+    store8(addr + 2, (val / 65536) % 256);
+    store8(addr + 3, (val / 16777216) % 256);
+}
+
+// Fill a memory region with a byte value
+fn memset(addr: u64, val: i32, count: i32) -> void {
+    let i: i32 = 0;
+    while (i < count) {
+        store8(addr + i32_to_u64(i), val);
+        i = i + 1;
+    }
+}

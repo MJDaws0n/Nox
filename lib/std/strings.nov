@@ -112,3 +112,340 @@ fn substr_len(s: str, start: i32, count: i32) -> str {
     }
     return result;
 }
+
+// ---------------------------------------------------------------------------
+// Find last occurrence of needle in s, returns -1 if not found
+// ---------------------------------------------------------------------------
+
+fn str_last_find(s: str, needle: str) -> i32 {
+    let sl: i32 = len(s);
+    let nl: i32 = len(needle);
+    if (nl == 0) { return sl; }
+    if (sl < nl) { return -1; }
+    let i: i32 = sl - nl;
+    while (i >= 0) {
+        let ok: bool = true;
+        let j: i32 = 0;
+        while (j < nl) {
+            let ci: i32 = i + j;
+            if (s[ci] != needle[j]) { ok = false; j = nl; }
+            else { j = j + 1; }
+        }
+        if (ok) { return i; }
+        i = i - 1;
+    }
+    return -1;
+}
+
+// ---------------------------------------------------------------------------
+// Count non-overlapping occurrences of needle in s
+// ---------------------------------------------------------------------------
+
+fn str_count(s: str, needle: str) -> i32 {
+    let sl: i32 = len(s);
+    let nl: i32 = len(needle);
+    if (nl == 0) { return 0; }
+    if (sl < nl) { return 0; }
+    let count: i32 = 0;
+    let i: i32 = 0;
+    let limit: i32 = sl - nl + 1;
+    while (i < limit) {
+        let ok: bool = true;
+        let j: i32 = 0;
+        while (j < nl) {
+            let ci: i32 = i + j;
+            if (s[ci] != needle[j]) { ok = false; j = nl; }
+            else { j = j + 1; }
+        }
+        if (ok) {
+            count = count + 1;
+            i = i + nl;
+        } else {
+            i = i + 1;
+        }
+    }
+    return count;
+}
+
+// ---------------------------------------------------------------------------
+// Replace all occurrences of old with new_val in s
+// ---------------------------------------------------------------------------
+
+fn str_replace(s: str, old: str, new_val: str) -> str {
+    let ol: i32 = len(old);
+    if (ol == 0) { return s; }
+    let sl: i32 = len(s);
+    let result: str = "";
+    let i: i32 = 0;
+    while (i < sl) {
+        let found: bool = false;
+        if (i + ol <= sl) {
+            found = true;
+            let j: i32 = 0;
+            while (j < ol) {
+                let ci: i32 = i + j;
+                if (s[ci] != old[j]) { found = false; j = ol; }
+                else { j = j + 1; }
+            }
+        }
+        if (found) {
+            result = result + new_val;
+            i = i + ol;
+        } else {
+            result = result + s[i];
+            i = i + 1;
+        }
+    }
+    return result;
+}
+
+// Replace only the first occurrence
+fn str_replace_first(s: str, old: str, new_val: str) -> str {
+    let pos: i32 = str_find(s, old);
+    if (pos < 0) { return s; }
+    let ol: i32 = len(old);
+    return substr_len(s, 0, pos) + new_val + substr(s, pos + ol);
+}
+
+// ---------------------------------------------------------------------------
+// Trim whitespace
+// ---------------------------------------------------------------------------
+
+fn str_trim_left(s: str) -> str {
+    let sl: i32 = len(s);
+    let i: i32 = 0;
+    while (i < sl) {
+        if (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+            i = i + 1;
+        } else {
+            break;
+        }
+    }
+    return substr(s, i);
+}
+
+fn str_trim_right(s: str) -> str {
+    let sl: i32 = len(s);
+    let i: i32 = sl - 1;
+    while (i >= 0) {
+        if (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+            i = i - 1;
+        } else {
+            break;
+        }
+    }
+    return substr_len(s, 0, i + 1);
+}
+
+fn str_trim(s: str) -> str {
+    return str_trim_right(str_trim_left(s));
+}
+
+// ---------------------------------------------------------------------------
+// Case conversion (ASCII only)
+// ---------------------------------------------------------------------------
+
+fn str_upper(s: str) -> str {
+    let result: str = "";
+    let i: i32 = 0;
+    let sl: i32 = len(s);
+    while (i < sl) {
+        let ch: i32 = s[i] & 255;
+        if (ch >= 97 && ch <= 122) {
+            let tmp: str = " ";
+            tmp[0] = ch - 32;
+            result = result + tmp;
+        } else {
+            result = result + s[i];
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn str_lower(s: str) -> str {
+    let result: str = "";
+    let i: i32 = 0;
+    let sl: i32 = len(s);
+    while (i < sl) {
+        let ch: i32 = s[i] & 255;
+        if (ch >= 65 && ch <= 90) {
+            let tmp: str = " ";
+            tmp[0] = ch + 32;
+            result = result + tmp;
+        } else {
+            result = result + s[i];
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Reverse a string
+// ---------------------------------------------------------------------------
+
+fn str_reverse(s: str) -> str {
+    let result: str = "";
+    let i: i32 = len(s) - 1;
+    while (i >= 0) {
+        result = result + s[i];
+        i = i - 1;
+    }
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Character classification (ASCII)
+// ---------------------------------------------------------------------------
+
+fn is_digit(ch: i32) -> bool {
+    let c: i32 = ch & 255;
+    return (c >= 48 && c <= 57);
+}
+
+fn is_alpha(ch: i32) -> bool {
+    let c: i32 = ch & 255;
+    return (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+}
+
+fn is_alnum(ch: i32) -> bool {
+    return is_digit(ch) || is_alpha(ch);
+}
+
+fn is_space(ch: i32) -> bool {
+    let c: i32 = ch & 255;
+    return (c == 32 || c == 9 || c == 10 || c == 13);
+}
+
+fn is_upper(ch: i32) -> bool {
+    let c: i32 = ch & 255;
+    return (c >= 65 && c <= 90);
+}
+
+fn is_lower(ch: i32) -> bool {
+    let c: i32 = ch & 255;
+    return (c >= 97 && c <= 122);
+}
+
+// ---------------------------------------------------------------------------
+// Padding
+// ---------------------------------------------------------------------------
+
+fn str_pad_left(s: str, total: i32, pad: str) -> str {
+    let sl: i32 = len(s);
+    if (sl >= total) { return s; }
+    let result: str = "";
+    let needed: i32 = total - sl;
+    let i: i32 = 0;
+    while (i < needed) {
+        result = result + pad;
+        i = i + 1;
+    }
+    return result + s;
+}
+
+fn str_pad_right(s: str, total: i32, pad: str) -> str {
+    let sl: i32 = len(s);
+    if (sl >= total) { return s; }
+    let result: str = s;
+    let needed: i32 = total - sl;
+    let i: i32 = 0;
+    while (i < needed) {
+        result = result + pad;
+        i = i + 1;
+    }
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// String repetition check
+// ---------------------------------------------------------------------------
+
+fn str_equals(a: str, b: str) -> bool {
+    let al: i32 = len(a);
+    let bl: i32 = len(b);
+    if (al != bl) { return false; }
+    let i: i32 = 0;
+    while (i < al) {
+        if (a[i] != b[i]) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Split string at first occurrence of delimiter
+// Returns the part before the delimiter. Use str_find + substr to get after.
+// ---------------------------------------------------------------------------
+
+fn str_split_first(s: str, delim: str) -> str {
+    let pos: i32 = str_find(s, delim);
+    if (pos < 0) { return s; }
+    return substr_len(s, 0, pos);
+}
+
+fn str_split_rest(s: str, delim: str) -> str {
+    let pos: i32 = str_find(s, delim);
+    if (pos < 0) { return ""; }
+    return substr(s, pos + len(delim));
+}
+
+// ---------------------------------------------------------------------------
+// Check if string is empty or whitespace-only
+// ---------------------------------------------------------------------------
+
+fn str_is_empty(s: str) -> bool {
+    return len(s) == 0;
+}
+
+fn str_is_blank(s: str) -> bool {
+    let sl: i32 = len(s);
+    let i: i32 = 0;
+    while (i < sl) {
+        if (s[i] != ' ' && s[i] != '\t' && s[i] != '\n' && s[i] != '\r') {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Convert integer to hex string
+// ---------------------------------------------------------------------------
+
+fn int_to_hex(n: i32) -> str {
+    if (n == 0) { return "0"; }
+    let val: i32 = n;
+    if (val < 0) { val = 0 - val; }
+    let digits: str = "";
+    while (val > 0) {
+        let d: i32 = val % 16;
+        if (d == 0) { digits = digits + "0"; }
+        else if (d == 1) { digits = digits + "1"; }
+        else if (d == 2) { digits = digits + "2"; }
+        else if (d == 3) { digits = digits + "3"; }
+        else if (d == 4) { digits = digits + "4"; }
+        else if (d == 5) { digits = digits + "5"; }
+        else if (d == 6) { digits = digits + "6"; }
+        else if (d == 7) { digits = digits + "7"; }
+        else if (d == 8) { digits = digits + "8"; }
+        else if (d == 9) { digits = digits + "9"; }
+        else if (d == 10) { digits = digits + "a"; }
+        else if (d == 11) { digits = digits + "b"; }
+        else if (d == 12) { digits = digits + "c"; }
+        else if (d == 13) { digits = digits + "d"; }
+        else if (d == 14) { digits = digits + "e"; }
+        else if (d == 15) { digits = digits + "f"; }
+        val = val / 16;
+    }
+    let result: str = "";
+    if (n < 0) { result = "-"; }
+    let i: i32 = len(digits) - 1;
+    while (i >= 0) {
+        result = result + digits[i];
+        i = i - 1;
+    }
+    return result;
+}

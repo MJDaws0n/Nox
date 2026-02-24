@@ -1,0 +1,444 @@
+// ---------------------------------------------------------------------------
+// net/darwin_arm64 - TCP networking for macOS Apple Silicon
+// Provides server & client socket operations via direct syscalls.
+// ---------------------------------------------------------------------------
+
+module net_darwin_arm64;
+
+import ../std;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn to_u8_net(v: i32) -> i32 {
+    return ((v % 256) + 256) % 256;
+}
+
+// Write a single byte to a raw memory address (pipe trick)
+fn net_store8(addr: u64, val: i32) -> void {
+    let tmp: str = "\0";
+    tmp[0] = to_u8_net(val);
+
+    mov(x16, 0x200002A);
+    syscall();
+    let rfd: i32 = u64_to_i32(getreg(x0));
+    let wfd: i32 = u64_to_i32(getreg(x1));
+
+    mov(x0, wfd);
+    mov(x1, tmp);
+    mov(x2, 1);
+    mov(x16, 0x2000004);
+    syscall();
+
+    mov(x0, wfd);
+    mov(x16, 0x2000006);
+    syscall();
+
+    mov(x0, rfd);
+    mov(x1, addr);
+    mov(x2, 1);
+    mov(x16, 0x2000003);
+    syscall();
+
+    mov(x0, rfd);
+    mov(x16, 0x2000006);
+    syscall();
+}
+
+// Pre-allocated null-filled buffer for network I/O
+fn net_make_buf(size: i32) -> str {
+    let buf: str = "";
+    let i: i32 = 0;
+    while (i < size) {
+        buf = buf + "\0";
+        i = i + 1;
+    }
+    return buf;
+}
+
+// Write a 32-bit little-endian value into a buffer at offset
+fn net_write_i32_le(buf: str, offset: i32, val: i32) -> void {
+    let v: i32 = val;
+    let i: i32 = 0;
+    while (i < 4) {
+        buf[offset + i] = to_u8_net(v % 256);
+        v = v / 256;
+        i = i + 1;
+    }
+}
+
+// Write a 16-bit big-endian value into a buffer at offset
+fn net_write_i16_be(buf: str, offset: i32, val: i32) -> void {
+    buf[offset] = to_u8_net(val / 256);
+    buf[offset + 1] = to_u8_net(val % 256);
+}
+
+// ---------------------------------------------------------------------------
+// sockaddr_in struct builder (16 bytes)
+// ---------------------------------------------------------------------------
+
+fn make_sockaddr_in(port: i32) -> str {
+    let buf: str = "";
+    let i: i32 = 0;
+    while (i < 16) {
+        buf = buf + "\0";
+        i = i + 1;
+    }
+    buf[0] = to_u8_net(16);   // sin_len
+    buf[1] = to_u8_net(2);    // sin_family = AF_INET
+    buf[2] = to_u8_net(port / 256);   // sin_port (big-endian high)
+    buf[3] = to_u8_net(port % 256);   // sin_port (big-endian low)
+    return buf;
+}
+
+// Build sockaddr_in for a specific IPv4 address (a.b.c.d)
+fn make_sockaddr_in_addr(a: i32, b: i32, c: i32, d: i32, port: i32) -> str {
+    let buf: str = make_sockaddr_in(port);
+    buf[4] = to_u8_net(a);
+    buf[5] = to_u8_net(b);
+    buf[6] = to_u8_net(c);
+    buf[7] = to_u8_net(d);
+    return buf;
+}
+
+// ---------------------------------------------------------------------------
+// Socket creation - AF_INET=2, SOCK_STREAM=1
+// ---------------------------------------------------------------------------
+
+fn net_socket() -> i32 {
+    mov(x0, 2);    // AF_INET
+    mov(x1, 1);    // SOCK_STREAM
+    mov(x2, 0);    // protocol
+    mov(x16, 0x2000000 + 97);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// ---------------------------------------------------------------------------
+// Socket options
+// ---------------------------------------------------------------------------
+
+fn net_set_reuse(fd: i32) -> i32 {
+    let one: i32 = 1;
+    let one_addr: u64 = &one;
+    mov(x0, fd);
+    mov(x1, 0xFFFF);    // SOL_SOCKET
+    mov(x2, 0x0004);    // SO_REUSEADDR
+    mov(x3, one_addr);
+    mov(x4, 4);
+    mov(x16, 0x2000000 + 105);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_set_nosigpipe(fd: i32) -> i32 {
+    let one: i32 = 1;
+    let one_addr: u64 = &one;
+    mov(x0, fd);
+    mov(x1, 0xFFFF);     // SOL_SOCKET
+    mov(x2, 0x1022);     // SO_NOSIGPIPE
+    mov(x3, one_addr);
+    mov(x4, 4);
+    mov(x16, 0x2000000 + 105);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_set_nonblock(fd: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, 3);   // F_GETFL
+    mov(x2, 0);
+    mov(x16, 0x2000000 + 92);
+    syscall();
+    let flags: i32 = u64_to_i32(getreg(x0));
+
+    let new_flags: i32 = flags + 4;  // O_NONBLOCK = 0x0004
+    mov(x0, fd);
+    mov(x1, 4);   // F_SETFL
+    mov(x2, new_flags);
+    mov(x16, 0x2000000 + 92);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_set_keepalive(fd: i32) -> i32 {
+    let one: i32 = 1;
+    let one_addr: u64 = &one;
+    mov(x0, fd);
+    mov(x1, 0xFFFF);    // SOL_SOCKET
+    mov(x2, 0x0008);    // SO_KEEPALIVE
+    mov(x3, one_addr);
+    mov(x4, 4);
+    mov(x16, 0x2000000 + 105);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// ---------------------------------------------------------------------------
+// Bind / Listen / Accept (server)
+// ---------------------------------------------------------------------------
+
+fn net_bind(fd: i32, port: i32) -> i32 {
+    let addr: str = make_sockaddr_in(port);
+    mov(x9, addr);
+    let addr_ptr: u64 = getreg(x9);
+    mov(x0, fd);
+    mov(x1, addr_ptr);
+    mov(x2, 16);
+    mov(x16, 0x2000000 + 104);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_listen(fd: i32, backlog: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, backlog);
+    mov(x16, 0x2000000 + 106);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_accept(fd: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, 0);
+    mov(x2, 0);
+    mov(x16, 0x2000000 + 30);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// ---------------------------------------------------------------------------
+// Connect (client)
+// ---------------------------------------------------------------------------
+
+fn net_connect(fd: i32, a: i32, b: i32, c: i32, d: i32, port: i32) -> i32 {
+    let addr: str = make_sockaddr_in_addr(a, b, c, d, port);
+    mov(x9, addr);
+    let addr_ptr: u64 = getreg(x9);
+    mov(x0, fd);
+    mov(x1, addr_ptr);
+    mov(x2, 16);
+    mov(x16, 0x2000000 + 98);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// Connect to localhost on a given port
+fn net_connect_local(port: i32) -> i32 {
+    let fd: i32 = net_socket();
+    if (fd < 0) { return -1; }
+    let rc: i32 = net_connect(fd, 127, 0, 0, 1, port);
+    if (rc != 0) {
+        net_close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+// ---------------------------------------------------------------------------
+// Read / Write
+// ---------------------------------------------------------------------------
+
+fn net_read(fd: i32, buf: str, max_len: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, buf);
+    mov(x2, max_len);
+    mov(x16, 0x2000003);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_read_safe(fd: i32, buf: str, max_len: i32) -> i32 {
+    let avail: i32 = net_bytes_available(fd);
+    if (avail <= 0) {
+        let alive: i32 = net_poll_read(fd, 0);
+        if (alive < 0) { return -1; }
+        if (alive == 0) { return 0; }
+        return -1;
+    }
+    let to_read: i32 = max_len;
+    if (to_read > avail) { to_read = avail; }
+    mov(x0, fd);
+    mov(x1, buf);
+    mov(x2, to_read);
+    mov(x16, 0x2000003);
+    syscall();
+    let nr: i32 = u64_to_i32(getreg(x0));
+    if (nr > 0 && nr <= to_read) { return nr; }
+    return -1;
+}
+
+fn net_write(fd: i32, data: str, length: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, data);
+    mov(x2, length);
+    mov(x16, 0x2000004);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_write_str(fd: i32, s: str) -> i32 {
+    return net_write(fd, s, len(s));
+}
+
+fn net_write_line(fd: i32, s: str) -> i32 {
+    let line: str = s + "\n";
+    return net_write(fd, line, len(line));
+}
+
+// ---------------------------------------------------------------------------
+// Close
+// ---------------------------------------------------------------------------
+
+fn net_close(fd: i32) -> void {
+    mov(x0, fd);
+    mov(x16, 0x2000006);
+    syscall();
+}
+
+fn net_shutdown(fd: i32, how: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, how);
+    mov(x16, 0x2000000 + 134);
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// ---------------------------------------------------------------------------
+// Poll & status
+// ---------------------------------------------------------------------------
+
+fn net_poll_read(fd: i32, timeout_ms: i32) -> i32 {
+    let pfd: str = "\0\0\0\0\0\0\0\0";
+    pfd[0] = to_u8_net(fd % 256);
+    pfd[1] = to_u8_net((fd / 256) % 256);
+    pfd[2] = to_u8_net((fd / 65536) % 256);
+    pfd[3] = to_u8_net((fd / 16777216) % 256);
+    pfd[4] = to_u8_net(1);   // POLLIN
+    pfd[5] = to_u8_net(0);
+
+    mov(x0, pfd);
+    mov(x1, 1);
+    mov(x2, timeout_ms);
+    mov(x16, 0x2000000 + 230);
+    syscall();
+    let ret: i32 = u64_to_i32(getreg(x0));
+    if (ret <= 0) { return ret; }
+
+    let revents: i32 = (pfd[6] & 255) + ((pfd[7] & 255) * 256);
+    if ((revents & 1) == 0) { return -1; }
+    return ret;
+}
+
+fn net_bytes_available(fd: i32) -> i32 {
+    let count_buf: str = "\0\0\0\0";
+    let count_ptr: u64 = ptr(count_buf);
+    mov(x0, fd);
+    mov(x1, 1074030207);  // FIONREAD = 0x4004667F
+    mov(x2, count_ptr);
+    mov(x16, 0x2000000 + 54);
+    syscall();
+
+    let b0: i32 = count_buf[0] & 255;
+    let b1: i32 = count_buf[1] & 255;
+    let b2: i32 = count_buf[2] & 255;
+    let b3: i32 = count_buf[3] & 255;
+    return b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216);
+}
+
+// ---------------------------------------------------------------------------
+// Signal handling
+// ---------------------------------------------------------------------------
+
+fn net_ignore_sigpipe() -> void {
+    let sa: str = net_make_buf(128);
+    sa[0] = 1;  // sa_handler = SIG_IGN
+    sa[1] = 0;
+    sa[2] = 0;
+    sa[3] = 0;
+    sa[4] = 0;
+    sa[5] = 0;
+    sa[6] = 0;
+    sa[7] = 0;
+    mov(x0, 13);    // SIGPIPE
+    mov(x1, sa);
+    mov(x2, 0);
+    mov(x16, 0x200002E);  // SYS_sigaction = 46
+    syscall();
+}
+
+// ---------------------------------------------------------------------------
+// High-level server helpers
+// ---------------------------------------------------------------------------
+
+// Create, configure, bind, and listen on a TCP port. Returns server fd.
+fn net_listen_on(port: i32, backlog: i32) -> i32 {
+    let fd: i32 = net_socket();
+    if (fd < 0) { return -1; }
+    net_set_reuse(fd);
+    net_set_nosigpipe(fd);
+    let rc: i32 = net_bind(fd, port);
+    if (rc != 0) {
+        net_close(fd);
+        return -1;
+    }
+    rc = net_listen(fd, backlog);
+    if (rc != 0) {
+        net_close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+// Read a line from a socket (up to newline or max_len)
+fn net_read_line(fd: i32, max_len: i32) -> str {
+    let buf: str = "\0";
+    let out: str = "";
+    let pos: i32 = 0;
+    while (pos < max_len) {
+        mov(x0, fd);
+        mov(x9, buf);
+        let bptr: u64 = getreg(x9);
+        mov(x1, bptr);
+        mov(x2, 1);
+        mov(x16, 0x2000003);
+        syscall();
+        let nread: i32 = u64_to_i32(getreg(x0));
+        if (nread <= 0) { break; }
+        if (buf[0] == '\n') { break; }
+        if (buf[0] == '\r') {
+            // skip carriage return
+        } else {
+            out = out + buf[0];
+        }
+        pos = pos + 1;
+    }
+    return out;
+}
+
+// Read all available data from a socket into a string
+fn net_read_all(fd: i32, max_len: i32) -> str {
+    let buf: str = net_make_buf(max_len);
+    let total: i32 = 0;
+    let result: str = "";
+    while (total < max_len) {
+        let avail: i32 = net_poll_read(fd, 100);
+        if (avail <= 0) { break; }
+        let remaining: i32 = max_len - total;
+        mov(x0, fd);
+        mov(x1, buf);
+        mov(x2, remaining);
+        mov(x16, 0x2000003);
+        syscall();
+        let nr: i32 = u64_to_i32(getreg(x0));
+        if (nr <= 0) { break; }
+        let i: i32 = 0;
+        while (i < nr) {
+            result = result + buf[i];
+            i = i + 1;
+        }
+        total = total + nr;
+    }
+    return result;
+}
