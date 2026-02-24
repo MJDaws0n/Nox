@@ -1,0 +1,72 @@
+// ---------------------------------------------------------------------------
+// std/memory_windows_amd64 - memory & buffer ops (Windows x86-64)
+// ---------------------------------------------------------------------------
+
+module std_memory_windows_amd64;
+
+import core;
+import strings;
+import windows_amd64;
+
+fn make_buffer(size: i32) -> str {
+    if (size <= 0) { return ""; }
+    let buf: str = "        ";
+    while (len(buf) < size) {
+        buf = buf + buf;
+    }
+    if (len(buf) > size) {
+        let pa: u64 = ptr(buf);
+        return copy_bytes_raw(pa, size);
+    }
+    return buf;
+}
+
+// Copy raw bytes using Windows heap allocation + RtlMoveMemory
+fn copy_bytes_raw(src: u64, length: i32) -> str {
+    if (length <= 0) { return ""; }
+    let buf: str = "";
+    let j: i32 = 0;
+    while (j < length) { buf = buf + " "; j = j + 1; }
+    let dest: u64 = ptr(buf);
+    win_call("RtlMoveMemory", dest, src, length);
+    return buf;
+}
+
+fn copy_bytes(src: u64, length: i32) -> str {
+    return copy_bytes_raw(src, length);
+}
+
+fn cstr_to_str(addr: u64) -> str {
+    let slen: u64 = cstr_len(addr);
+    if (slen == 0) { return ""; }
+    return copy_bytes(addr, u64_to_i32(slen));
+}
+
+fn byte_at(s: str, i: i32) -> i32 {
+    return read_byte(ptr(s) + i32_to_u64(i));
+}
+
+fn argv_get(argv: u64, index: i32) -> str {
+    let offset: u64 = i32_to_u64(index) * 8;
+    let addr: u64 = i64_to_u64(load64(argv + offset));
+    return cstr_to_str(addr);
+}
+
+// Write a single byte using RtlFillMemory
+fn store8(addr: u64, val: i32) -> void {
+    let byte_val: i32 = ((val % 256) + 256) % 256;
+    win_call("RtlFillMemory", addr, 1, byte_val);
+}
+
+// Write a 32-bit value to a raw memory address (little-endian)
+fn store32(addr: u64, val: i32) -> void {
+    store8(addr, val % 256);
+    store8(addr + 1, (val / 256) % 256);
+    store8(addr + 2, (val / 65536) % 256);
+    store8(addr + 3, (val / 16777216) % 256);
+}
+
+// Fill a memory region with a byte value
+fn memset(addr: u64, val: i32, count: i32) -> void {
+    win_call("RtlFillMemory", addr, count, val);
+}

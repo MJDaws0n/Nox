@@ -1,0 +1,110 @@
+// ---------------------------------------------------------------------------
+// time/windows_amd64 - time utilities for Windows x86-64
+// Uses Sleep, GetTickCount64, QueryPerformanceCounter.
+// ---------------------------------------------------------------------------
+
+module time_windows_amd64;
+
+import ../std;
+
+// ---------------------------------------------------------------------------
+// Sleep for a given number of milliseconds
+// ---------------------------------------------------------------------------
+
+fn sleep_ms(ms: i32) -> void {
+    win_call("Sleep", ms);
+}
+
+// ---------------------------------------------------------------------------
+// Sleep for a given number of seconds
+// ---------------------------------------------------------------------------
+
+fn sleep_s(seconds: i32) -> void {
+    sleep_ms(seconds * 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Get current time in milliseconds (ms since boot)
+// ---------------------------------------------------------------------------
+
+fn get_time_ms() -> i64 {
+    win_call("GetTickCount64");
+    return getreg(rax);
+}
+
+// ---------------------------------------------------------------------------
+// Get current time in microseconds
+// Uses QueryPerformanceCounter / QueryPerformanceFrequency
+// ---------------------------------------------------------------------------
+
+fn get_time_us() -> i64 {
+    let count: i64 = 0;
+    let freq: i64 = 0;
+    let ca: u64 = &count;
+    let fa: u64 = &freq;
+    win_call("QueryPerformanceCounter", ca);
+    win_call("QueryPerformanceFrequency", fa);
+    if (freq == 0) { return 0; }
+    // us = count * 1000000 / freq
+    return (count * 1000000) / freq;
+}
+
+// ---------------------------------------------------------------------------
+// Get current time in seconds
+// ---------------------------------------------------------------------------
+
+fn get_time_s() -> i64 {
+    let ms: i64 = get_time_ms();
+    return ms / 1000;
+}
+
+// ---------------------------------------------------------------------------
+// Measure elapsed time
+// ---------------------------------------------------------------------------
+
+fn elapsed_ms(start_ns: i64, end_ns: i64) -> i64 {
+    return (end_ns - start_ns) / 1000000;
+}
+
+fn elapsed_us(start_ns: i64, end_ns: i64) -> i64 {
+    return (end_ns - start_ns) / 1000;
+}
+
+// ---------------------------------------------------------------------------
+// Timer helpers (use get_time_ns from std for consistency)
+// ---------------------------------------------------------------------------
+
+fn timer_start() -> i64 {
+    return get_time_ns();
+}
+
+fn timer_elapsed_ms(start: i64) -> i64 {
+    let now: i64 = get_time_ns();
+    return (now - start) / 1000000;
+}
+
+fn timer_elapsed_us(start: i64) -> i64 {
+    let now: i64 = get_time_ns();
+    return (now - start) / 1000;
+}
+
+fn timer_elapsed_s(start: i64) -> i64 {
+    let now: i64 = get_time_ns();
+    return (now - start) / 1000000000;
+}
+
+// ---------------------------------------------------------------------------
+// Format milliseconds as human-readable string
+// ---------------------------------------------------------------------------
+
+fn format_duration_ms(ms: i64) -> str {
+    if (ms < 1000) {
+        return int_to_str(ms) + "ms";
+    }
+    let secs: i64 = ms / 1000;
+    let remainder: i64 = ms % 1000;
+    if (remainder == 0) {
+        return int_to_str(secs) + "s";
+    }
+    return int_to_str(secs) + "." + int_to_str(remainder) + "s";
+}

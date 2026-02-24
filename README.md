@@ -93,36 +93,66 @@ Nox's bundled libraries use a folder-based structure with platform-specific impl
 
 ```
 lib/
-├── std/                         ← standard library
-│   ├── main.nov                 ← loader (imports core + platform files)
-│   ├── core.nov                 ← cross-platform: len, str_to_i32, bool_to_str, etc.
-│   ├── strings.nov              ← cross-platform: starts_with, substr, str_replace, str_upper, etc.
-│   ├── darwin_arm64.nov         ← macOS ARM64: print, exit, fork, etc.
-│   └── memory_darwin_arm64.nov  ← macOS ARM64: buffers, store8, argv, cstr
+├── std/                              ← standard library
+│   ├── main.nov                      ← loader (imports core + platform files)
+│   ├── core.nov                      ← cross-platform: len, str_to_i32, bool_to_str, etc.
+│   ├── strings.nov                   ← cross-platform: str_replace, str_upper, etc.
+│   ├── darwin_arm64.nov              ← macOS ARM64: print, exit, fork, etc.
+│   ├── memory_darwin_arm64.nov       ← macOS ARM64: buffers, store8, argv, cstr
+│   ├── windows_amd64.nov             ← Windows x64: print, exit, input via Win API
+│   ├── memory_windows_amd64.nov      ← Windows x64: buffers via RtlMoveMemory
+│   ├── windows_x86.nov              ← Windows x86: 32-bit Win API variants
+│   └── memory_windows_x86.nov       ← Windows x86: 32-bit memory ops
 ├── file_io/
-│   ├── main.nov                 ← loader
-│   └── darwin_arm64.nov         ← macOS ARM64: file ops, paths, dirs, mmap
+│   ├── main.nov                      ← loader
+│   ├── darwin_arm64.nov              ← macOS ARM64: file ops, paths, dirs, mmap
+│   ├── windows_amd64.nov             ← Windows x64: CreateFileA, ReadFile, WriteFile
+│   └── windows_x86.nov              ← Windows x86: 32-bit file ops
 ├── process/
-│   ├── main.nov                 ← loader
-│   └── darwin_arm64.nov         ← macOS ARM64: run_cmd, capture_output, shell_exec, pick_file_dialog
+│   ├── main.nov                      ← loader
+│   ├── darwin_arm64.nov              ← macOS ARM64: fork, run_cmd, capture_output
+│   ├── windows_amd64.nov             ← Windows x64: CreateProcessA, cmd.exe
+│   └── windows_x86.nov              ← Windows x86: 32-bit process ops
 ├── maths/
-│   ├── main.nov                 ← loader
-│   └── core.nov                 ← cross-platform: abs, min, max, pow, gcd, lcm, sqrt, fibonacci
+│   ├── main.nov                      ← loader
+│   └── core.nov                      ← cross-platform: abs, min, max, pow, gcd, lcm
 ├── net/
-│   ├── main.nov                 ← loader
-│   └── darwin_arm64.nov         ← macOS ARM64: TCP sockets, bind, listen, connect, read, write
+│   ├── main.nov                      ← loader
+│   ├── darwin_arm64.nov              ← macOS ARM64: BSD sockets
+│   ├── windows_amd64.nov             ← Windows x64: Winsock2
+│   └── windows_x86.nov              ← Windows x86: Winsock2 (32-bit)
 ├── window/
-│   ├── main.nov                 ← loader
-│   └── darwin_arm64.nov         ← macOS ARM64: WebKit window manager via UNIX domain socket
+│   ├── main.nov                      ← loader
+│   ├── darwin_arm64.nov              ← macOS ARM64: WebKit window manager
+│   └── window_manager                ← macOS ARM64 binary (C helper)
 ├── time/
-│   ├── main.nov                 ← loader
-│   └── darwin_arm64.nov         ← macOS ARM64: sleep_ms, get_time_ms, timer helpers
+│   ├── main.nov                      ← loader
+│   ├── darwin_arm64.nov              ← macOS ARM64: sleep, timers
+│   ├── windows_amd64.nov             ← Windows x64: Sleep, GetTickCount64
+│   └── windows_x86.nov              ← Windows x86: 32-bit time ops
 └── env/
-    ├── main.nov                 ← loader
-    └── darwin_arm64.nov         ← macOS ARM64: getcwd, getpid, getenv, gethostname
+    ├── main.nov                      ← loader
+    ├── darwin_arm64.nov              ← macOS ARM64: getcwd, getpid, getenv
+    ├── windows_amd64.nov             ← Windows x64: Win API environment
+    └── windows_x86.nov              ← Windows x86: 32-bit env ops
 ```
 
-To add Windows or Linux support, add new platform files (e.g. `windows_amd64.nov`) alongside the existing ones.
+### Platform Support
+
+| Library | macOS ARM64 | Windows x64 | Windows x86 |
+|---------|:-----------:|:-----------:|:-----------:|
+| std     | ✅          | ✅          | ✅          |
+| file_io | ✅          | ✅          | ✅          |
+| process | ✅          | ✅          | ✅          |
+| maths   | ✅ (cross-platform) | ✅ (cross-platform) | ✅ (cross-platform) |
+| net     | ✅          | ✅          | ✅          |
+| time    | ✅          | ✅          | ✅          |
+| env     | ✅          | ✅          | ✅          |
+| window  | ✅          | —           | —           |
+
+**To use on Windows:** Edit the `main.nov` loader in each library folder to import the Windows variant instead of `darwin_arm64`. For example, in `lib/std/main.nov`, change `import darwin_arm64;` to `import windows_amd64;`.
+
+> **Note:** Due to a Novus compiler limitation (#if blocks in imported files don't export functions), platform selection requires manually changing the import in each loader. This will be automated once the compiler supports conditional exports.
 
 ### Bundled Library Reference
 
@@ -142,7 +172,7 @@ To add Windows or Linux support, add new platform files (e.g. `windows_amd64.nov
 - `str_is_empty`, `str_is_blank`, `int_to_hex`
 - `is_digit`, `is_alpha`, `is_alnum`, `is_space`, `is_upper`, `is_lower`
 
-**memory_darwin_arm64.nov** (macOS ARM64)
+**memory_darwin_arm64.nov** / **memory_windows_amd64.nov** / **memory_windows_x86.nov**
 - `make_buffer`, `copy_bytes_raw`, `copy_bytes`, `cstr_to_str`, `byte_at`, `argv_get`
 - `store8`, `store32`, `memset`
 </details>

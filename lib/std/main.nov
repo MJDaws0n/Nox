@@ -1,6 +1,16 @@
 // ---------------------------------------------------------------------------
 // std - Novus standard library
 // Loader that imports cross-platform core + platform-specific implementations
+//
+// Platform files available:
+//   darwin_arm64          - macOS Apple Silicon
+//   memory_darwin_arm64   - memory ops for macOS Apple Silicon
+//   windows_amd64         - Windows x86-64
+//   memory_windows_amd64  - memory ops for Windows x86-64
+//   windows_x86           - Windows x86 (32-bit)
+//   memory_windows_x86    - memory ops for Windows x86 (32-bit)
+//
+// To use on Windows, change imports below to the Windows variants.
 // ---------------------------------------------------------------------------
 
 module std;
