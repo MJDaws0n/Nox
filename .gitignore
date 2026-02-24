@@ -1,0 +1,12 @@
+# Build artifacts
+build/
+
+# macOS
+.DS_Store
+
+# Novus compiler binary (downloaded separately)
+novus
+
+# Temp files
+*.tmp
+/tmp/

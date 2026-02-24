@@ -1,0 +1,543 @@
+// ---------------------------------------------------------------------------
+// Nox - The Novus Package Manager
+//
+// Commands:
+//   nox pull <name|url>    pull a package by registry name or github url
+//   nox remove <name>      remove a package from lib/
+//   nox list               list available packages in the registry
+//   nox init               initialise a new novus project
+//   nox help               show help
+//   nox version            show version
+//
+// Flags:
+//   --no-depth             clone full git history (default: shallow)
+// ---------------------------------------------------------------------------
+
+module nox;
+
+import lib/standard_lib;
+import lib/standard_lib_macos_silicon;
+import lib/memory;
+import lib/file_io;
+import lib/process;
+
+// ---------------------------------------------------------------------------
+// version and config - in functions cos globals in main module
+// dont always work in funcs (novus quirk)
+// ---------------------------------------------------------------------------
+
+fn get_version() -> str {
+    return "1.0.0";
+}
+
+fn get_registry_url() -> str {
+    return "https://raw.githubusercontent.com/MJDaws0n/Nox/main/registry.txt";
+}
+
+// ---------------------------------------------------------------------------
+// run a command synchronously and return the wait status
+// status == 0 means success
+// ---------------------------------------------------------------------------
+
+fn run_cmd(exe: str, argv: []u64) -> i32 {
+    let pid: i32 = spawn_execve(exe, argv);
+    if (pid < 0) {
+        return -1;
+    }
+    return wait_pid(pid);
+}
+
+// ---------------------------------------------------------------------------
+// read an entire file into a string
+// ---------------------------------------------------------------------------
+
+fn read_file(path: str) -> str {
+    let fd: i32 = file_open_read(path);
+    if (fd < 0) { return ""; }
+    let sz: u64 = file_size(fd);
+    let isz: i32 = u64_to_i32(sz);
+    if (isz <= 0) {
+        file_close(fd);
+        return "";
+    }
+    let buf: str = make_buffer(isz + 1);
+    let nr: i32 = file_read(fd, ptr(buf), isz);
+    file_close(fd);
+    if (nr <= 0) { return ""; }
+    return copy_bytes(ptr(buf), nr);
+}
+
+// ---------------------------------------------------------------------------
+// fetch the package registry from github using curl
+// downloads to a temp file then reads it
+// ---------------------------------------------------------------------------
+
+fn fetch_registry() -> str {
+    let url: str = get_registry_url();
+    let tmp: str = "/tmp/nox_registry.txt";
+
+    let curl: str = "/usr/bin/curl";
+    let a1: str = "-s";
+    let a2: str = "-f";
+    let a3: str = "-L";
+    let a4: str = "-o";
+    let av: []u64 = [ptr(curl), ptr(a1), ptr(a2), ptr(a3), ptr(a4), ptr(tmp), ptr(url), 0];
+
+    let status: i32 = run_cmd(curl, av);
+    if (status != 0) { return ""; }
+
+    let content: str = read_file(tmp);
+    file_delete(tmp);
+    return content;
+}
+
+// ---------------------------------------------------------------------------
+// parse registry to find the url for a given package name
+// registry format: name=github_url (one per line, # for comments)
+// ---------------------------------------------------------------------------
+
+fn registry_lookup(registry: str, name: str) -> str {
+    let i: i32 = 0;
+    let rlen: i32 = len(registry);
+
+    while (i < rlen) {
+        // read one line
+        let line: str = "";
+        while (i < rlen && registry[i] != '\n' && registry[i] != '\r') {
+            line = line + registry[i];
+            i = i + 1;
+        }
+        // skip line endings
+        if (i < rlen && registry[i] == '\r') { i = i + 1; }
+        if (i < rlen && registry[i] == '\n') { i = i + 1; }
+
+        // skip empty lines and comments
+        if (len(line) == 0) { continue; }
+        if (line[0] == '#') { continue; }
+
+        // find '=' separator
+        let eq_pos: i32 = str_find(line, "=");
+        if (eq_pos < 0) { continue; }
+
+        let pkg_name: str = substr_len(line, 0, eq_pos);
+        let pkg_url: str = substr(line, eq_pos + 1);
+
+        if (pkg_name == name) {
+            return pkg_url;
+        }
+    }
+
+    return "";
+}
+
+// ---------------------------------------------------------------------------
+// extract the repo name from a github url
+// e.g. "https://github.com/MJDaws0n/GolemMC" -> "GolemMC"
+//      "https://github.com/user/repo.git"    -> "repo"
+// ---------------------------------------------------------------------------
+
+fn extract_repo_name(url: str) -> str {
+    let last_slash: i32 = -1;
+    let i: i32 = 0;
+    let ulen: i32 = len(url);
+    while (i < ulen) {
+        if (url[i] == '/') { last_slash = i; }
+        i = i + 1;
+    }
+    if (last_slash < 0) { return url; }
+
+    let name: str = substr(url, last_slash + 1);
+
+    // remove .git suffix if present
+    if (ends_with(name, ".git")) {
+        name = substr_len(name, 0, len(name) - 4);
+    }
+
+    // remove trailing slash
+    if (len(name) > 0 && name[len(name) - 1] == '/') {
+        name = substr_len(name, 0, len(name) - 1);
+    }
+
+    return name;
+}
+
+// ---------------------------------------------------------------------------
+// check if a string looks like a url
+// ---------------------------------------------------------------------------
+
+fn is_url(s: str) -> bool {
+    if (starts_with(s, "https://")) { return true; }
+    if (starts_with(s, "http://")) { return true; }
+    if (starts_with(s, "git@")) { return true; }
+    if (starts_with(s, "github.com/")) { return true; }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// validate a package name to prevent directory traversal
+// ---------------------------------------------------------------------------
+
+fn is_safe_name(name: str) -> bool {
+    if (len(name) == 0) { return false; }
+    if (str_contains(name, "..")) { return false; }
+    if (str_contains(name, "/")) { return false; }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// git clone helpers
+// ---------------------------------------------------------------------------
+
+fn git_clone_shallow(url: str, dest: str) -> i32 {
+    let git: str = "/usr/bin/git";
+    let a1: str = "clone";
+    let a2: str = "--depth";
+    let a3: str = "1";
+    let av: []u64 = [ptr(git), ptr(a1), ptr(a2), ptr(a3), ptr(url), ptr(dest), 0];
+    return run_cmd(git, av);
+}
+
+fn git_clone_full(url: str, dest: str) -> i32 {
+    let git: str = "/usr/bin/git";
+    let a1: str = "clone";
+    let av: []u64 = [ptr(git), ptr(a1), ptr(url), ptr(dest), 0];
+    return run_cmd(git, av);
+}
+
+// ---------------------------------------------------------------------------
+// pull a package from a github url into lib/
+// ---------------------------------------------------------------------------
+
+fn pull_package(url: str, shallow: bool) -> i32 {
+    let name: str = extract_repo_name(url);
+
+    if (len(name) == 0) {
+        print("error: could not determine package name from url");
+        return 1;
+    }
+
+    if (!is_safe_name(name)) {
+        print("error: invalid package name '" + name + "'");
+        return 1;
+    }
+
+    // ensure lib/ directory exists
+    sys_mkdir("lib", 493);
+
+    let dest: str = "lib/" + name;
+
+    // check if already installed
+    if (file_exists(dest)) {
+        print("package '" + name + "' already exists in lib/");
+        print("to update, remove it first: nox remove " + name);
+        return 1;
+    }
+
+    print("pulling " + name + "...");
+    print("");
+
+    // do the clone
+    let clone_ok: i32 = 0;
+    if (shallow) {
+        clone_ok = git_clone_shallow(url, dest);
+    } else {
+        clone_ok = git_clone_full(url, dest);
+    }
+
+    if (clone_ok == 0) {
+        print("");
+        print("done! " + name + " installed to " + dest);
+        return 0;
+    }
+
+    print("");
+    print("error: git clone failed");
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// remove a package from lib/
+// ---------------------------------------------------------------------------
+
+fn remove_package(name: str) -> i32 {
+    if (!is_safe_name(name)) {
+        print("error: invalid package name '" + name + "'");
+        return 1;
+    }
+
+    let dest: str = "lib/" + name;
+
+    if (!file_exists(dest)) {
+        print("error: package '" + name + "' not found in lib/");
+        return 1;
+    }
+
+    let rm: str = "/bin/rm";
+    let a1: str = "-rf";
+    let av: []u64 = [ptr(rm), ptr(a1), ptr(dest), 0];
+    let status: i32 = run_cmd(rm, av);
+
+    if (status == 0) {
+        print("removed " + name);
+        return 0;
+    }
+
+    print("error: could not remove " + name);
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// list available packages from the registry
+// ---------------------------------------------------------------------------
+
+fn show_list() -> void {
+    print("fetching package registry...");
+    print("");
+
+    let registry: str = fetch_registry();
+
+    if (len(registry) == 0) {
+        print("error: could not fetch package registry");
+        print("check your internet connection and try again");
+        return;
+    }
+
+    print("available packages:");
+    print("-------------------");
+
+    let i: i32 = 0;
+    let rlen: i32 = len(registry);
+    let count: i32 = 0;
+
+    while (i < rlen) {
+        let line: str = "";
+        while (i < rlen && registry[i] != '\n' && registry[i] != '\r') {
+            line = line + registry[i];
+            i = i + 1;
+        }
+        if (i < rlen && registry[i] == '\r') { i = i + 1; }
+        if (i < rlen && registry[i] == '\n') { i = i + 1; }
+
+        if (len(line) == 0) { continue; }
+        if (line[0] == '#') { continue; }
+
+        let eq_pos: i32 = str_find(line, "=");
+        if (eq_pos < 0) { continue; }
+
+        let pkg_name: str = substr_len(line, 0, eq_pos);
+        let pkg_url: str = substr(line, eq_pos + 1);
+
+        print("  " + pkg_name + "  ->  " + pkg_url);
+        count = count + 1;
+    }
+
+    print("");
+    print(i32_to_str(count) + " packages available");
+    print("install with: nox pull <name>");
+}
+
+// ---------------------------------------------------------------------------
+// initialise a new novus project
+// ---------------------------------------------------------------------------
+
+fn init_project() -> i32 {
+    if (file_exists("main.nov")) {
+        print("error: main.nov already exists in this directory");
+        return 1;
+    }
+
+    // create lib/ directory
+    sys_mkdir("lib", 493);
+
+    // write a hello world template
+    let fd: i32 = file_open_write("main.nov");
+    if (fd < 0) {
+        print("error: could not create main.nov");
+        return 1;
+    }
+
+    let t: str = "";
+    t = t + "module my_project;\n";
+    t = t + "\n";
+    t = t + "import lib/standard_lib;\n";
+    t = t + "import lib/standard_lib_macos_silicon;\n";
+    t = t + "\n";
+    t = t + "fn main() -> i32 {\n";
+    t = t + "    print(\"hello, world!\");\n";
+    t = t + "    return 0;\n";
+    t = t + "}\n";
+
+    file_write_str(fd, t);
+    file_close(fd);
+
+    print("initialised new novus project!");
+    print("");
+    print("created:");
+    print("  main.nov    - entry point");
+    print("  lib/        - package directory");
+    print("");
+    print("next steps:");
+    print("  nox pull novus-std    pull the standard libraries");
+    print("  ./novus main.nov      compile your project");
+
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// help and version
+// ---------------------------------------------------------------------------
+
+fn show_banner() -> void {
+    print("");
+    print("  _   _  _____  __  __");
+    print(" | \\ | |/ _ \\ \\/ / ");
+    print(" |  \\| | | | \\  /  ");
+    print(" | |\\  | |_| /  \\  ");
+    print(" |_| \\_|\\___/_/\\_\\");
+    print("                      ");
+    print(" the novus package manager");
+    print("");
+}
+
+fn show_help() -> void {
+    show_banner();
+    print("usage:");
+    print("  nox pull <package>       pull a package by name from the registry");
+    print("  nox pull <url>           pull a package from a github url");
+    print("  nox remove <package>     remove a package from lib/");
+    print("  nox list                 list available packages");
+    print("  nox init                 initialise a new novus project");
+    print("  nox help                 show this help message");
+    print("  nox version              show version info");
+    print("");
+    print("flags:");
+    print("  --no-depth               clone full git history (default: shallow)");
+    print("");
+    print("examples:");
+    print("  nox pull golemmc");
+    print("  nox pull https://github.com/MJDaws0n/GolemMC");
+    print("  nox remove GolemMC");
+    print("  nox list");
+    print("  nox init");
+    print("");
+}
+
+fn show_version() -> void {
+    print("nox v" + get_version());
+}
+
+// ---------------------------------------------------------------------------
+// print raw to stdout without newline (for inline output)
+// ---------------------------------------------------------------------------
+
+fn print_raw(msg: str) -> void {
+    mov(x0, 1);
+    mov(x1, msg);
+    mov(x2, len(msg));
+    mov(x16, 0x2000004);
+    syscall();
+}
+
+// ---------------------------------------------------------------------------
+// main entry point
+// ---------------------------------------------------------------------------
+
+fn main(argc: i32, argv: u64) -> i32 {
+    if (argc < 2) {
+        show_help();
+        return 0;
+    }
+
+    let cmd: str = argv_get(argv, 1);
+
+    // help
+    if (cmd == "help" || cmd == "--help" || cmd == "-h") {
+        show_help();
+        return 0;
+    }
+
+    // version
+    if (cmd == "version" || cmd == "--version" || cmd == "-v") {
+        show_version();
+        return 0;
+    }
+
+    // list
+    if (cmd == "list") {
+        show_list();
+        return 0;
+    }
+
+    // init
+    if (cmd == "init") {
+        return init_project();
+    }
+
+    // pull
+    if (cmd == "pull") {
+        if (argc < 3) {
+            print("error: 'nox pull' requires a package name or url");
+            print("usage: nox pull <package|url>");
+            return 1;
+        }
+
+        let target: str = argv_get(argv, 2);
+
+        // parse flags
+        let shallow: bool = true;
+        let fi: i32 = 3;
+        while (fi < argc) {
+            let flag: str = argv_get(argv, fi);
+            if (flag == "--no-depth") {
+                shallow = false;
+            }
+            fi = fi + 1;
+        }
+
+        // if target looks like a url, pull directly
+        if (is_url(target)) {
+            // add https:// for bare github.com/ urls
+            if (starts_with(target, "github.com/")) {
+                target = "https://" + target;
+            }
+            return pull_package(target, shallow);
+        }
+
+        // otherwise look it up in the registry
+        print("looking up '" + target + "' in registry...");
+        let registry: str = fetch_registry();
+
+        if (len(registry) == 0) {
+            print("error: could not fetch package registry");
+            print("check your internet connection and try again");
+            return 1;
+        }
+
+        let url: str = registry_lookup(registry, target);
+
+        if (len(url) == 0) {
+            print("error: package '" + target + "' not found in registry");
+            print("use 'nox list' to see available packages");
+            return 1;
+        }
+
+        return pull_package(url, shallow);
+    }
+
+    // remove
+    if (cmd == "remove" || cmd == "rm") {
+        if (argc < 3) {
+            print("error: 'nox remove' requires a package name");
+            print("usage: nox remove <package>");
+            return 1;
+        }
+
+        let target: str = argv_get(argv, 2);
+        return remove_package(target);
+    }
+
+    // unknown command
+    print("error: unknown command '" + cmd + "'");
+    print("run 'nox help' for usage information");
+    return 1;
+}
