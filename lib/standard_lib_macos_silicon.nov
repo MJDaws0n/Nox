@@ -140,3 +140,15 @@ fn spawn_execve(path: str, argv: []u64) -> i32 {
     }
     return pid;
 }
+
+// ---------------------------------------------------------------------------
+// Print raw to stdout without newline (for inline output)
+// ---------------------------------------------------------------------------
+
+fn print_raw(msg: str) -> void {
+    mov(x0, 1);
+    mov(x1, msg);
+    mov(x2, len(msg));
+    mov(x16, 0x2000004);
+    syscall();
+}
