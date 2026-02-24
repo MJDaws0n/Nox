@@ -1,13 +1,11 @@
 // ---------------------------------------------------------------------------
-// Process & subprocess utilities for Novus (macOS Apple Silicon)
+// process/darwin_arm64 - Process utilities for macOS Apple Silicon
 // ---------------------------------------------------------------------------
 
-module process;
+module process_darwin_arm64;
 
-import standard_lib;
-import standard_lib_macos_silicon;
-import memory;
-import file_io;
+import ../std;
+import ../file_io;
 
 // ---------------------------------------------------------------------------
 // Wait for child process

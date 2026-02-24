@@ -7,6 +7,10 @@
 # To add a package, submit a PR to https://github.com/MJDaws0n/Nox
 # or open an issue with the package details.
 
+# Novus Standard Library
+novus-std=https://github.com/MJDaws0n/Novus
+novus-std:latest=0.1.1
+
 # Maths
 maths=https://github.com/MJDaws0n/novus-maths
 maths:latest=1.0.0

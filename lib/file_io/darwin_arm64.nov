@@ -1,12 +1,10 @@
 // ---------------------------------------------------------------------------
-// File I/O library for Novus (macOS Apple Silicon)
+// file_io/darwin_arm64 - File I/O for macOS Apple Silicon
 // ---------------------------------------------------------------------------
 
-module file_io;
+module file_io_darwin_arm64;
 
-import standard_lib;
-import standard_lib_macos_silicon;
-import memory;
+import ../std;
 
 // ---------------------------------------------------------------------------
 // File descriptor operations

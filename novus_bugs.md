@@ -27,3 +27,38 @@ fn get_version() -> str {
     return "1.0.0";
 }
 ```
+
+## Bug 3: Functions inside `#if` blocks in imported files are not visible
+
+**Severity:** High
+**Workaround:** Don't use `#if` blocks in library files that need to export functions. Use file-level organisation instead (e.g. separate `darwin_arm64.nov` and `windows_amd64.nov` files).
+
+When a function is defined inside a `#if(os == "darwin") { ... }` block within an imported file, the function is not visible to the importing file, even when the condition evaluates to true. The same `#if` block works correctly when used in the main file being compiled.
+
+```novus
+// lib/platform.nov - functions inside #if are NOT visible to importers
+module platform;
+#if(os == "darwin") {
+    fn my_func() -> i32 { return 42; }  // invisible to importers!
+}
+
+// main.nov - this fails with "undefined function"
+import lib/platform;
+fn main() -> i32 { return my_func(); }  // ERROR: undefined function
+```
+
+## Bug 4: Nested `#if` blocks are not supported
+
+**Severity:** Medium
+**Workaround:** Use single-level `#if` only. Combine OS+arch selection at the file/import level.
+
+The parser rejects nested `#if` blocks (e.g. `#if(os == "darwin") { #if(arch == "arm64") { ... } }`). The inner `#if` produces a parse error: "expected import, fn, or let inside #if block, got HASH".
+
+```novus
+// This does NOT work:
+#if(os == "darwin") {
+    #if(arch == "arm64") {      // ERROR: nested #if not allowed
+        fn platform_func() -> void { }
+    }
+}
+```

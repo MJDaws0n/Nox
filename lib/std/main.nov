@@ -1,0 +1,11 @@
+// ---------------------------------------------------------------------------
+// std - Novus standard library
+// Loader that imports cross-platform core + platform-specific implementations
+// ---------------------------------------------------------------------------
+
+module std;
+
+import core;
+import strings;
+import darwin_arm64;
+import memory_darwin_arm64;
