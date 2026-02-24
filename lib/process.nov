@@ -68,3 +68,15 @@ fn capture_output(exe: str, argv: []u64, max_len: i32) -> str {
     }
     return result;
 }
+
+// ---------------------------------------------------------------------------
+// Run a command synchronously and return the wait status (0 = success)
+// ---------------------------------------------------------------------------
+
+fn run_cmd(exe: str, argv: []u64) -> i32 {
+    let pid: i32 = spawn_execve(exe, argv);
+    if (pid < 0) {
+        return -1;
+    }
+    return wait_pid(pid);
+}
