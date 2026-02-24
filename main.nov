@@ -545,6 +545,18 @@ fn resolve_deps_from_manifest(owner_pkg: str, dep_conf: str, conf_in: str) -> st
                 print("           you may need to resolve this manually");
             }
         } else {
+            if (dep_url == "bundled") {
+                // bundled library — already present in lib/, skip cloning
+                let dest: str = "lib/" + dep;
+                if (file_exists(dest)) {
+                    i = i + 1;
+                    continue;
+                }
+                print("  warning: bundled dependency missing: " + dep);
+                i = i + 1;
+                continue;
+            }
+
             // not installed - pull it
             print("  pulling dependency: " + dep);
             let dest: str = "lib/" + dep;
