@@ -194,3 +194,35 @@ fn file_delete(path: str) -> i32 {
     syscall();
     return u64_to_i32(getreg(x0));
 }
+
+// ---------------------------------------------------------------------------
+// Read an entire file into a string
+// ---------------------------------------------------------------------------
+
+fn read_file(path: str) -> str {
+    let fd: i32 = file_open_read(path);
+    if (fd < 0) { return ""; }
+    let sz: u64 = file_size(fd);
+    let isz: i32 = u64_to_i32(sz);
+    if (isz <= 0) {
+        file_close(fd);
+        return "";
+    }
+    let buf: str = make_buffer(isz + 1);
+    let nr: i32 = file_read(fd, ptr(buf), isz);
+    file_close(fd);
+    if (nr <= 0) { return ""; }
+    return copy_bytes(ptr(buf), nr);
+}
+
+// ---------------------------------------------------------------------------
+// Write a string to a file (creates or truncates)
+// ---------------------------------------------------------------------------
+
+fn write_file(path: str, content: str) -> i32 {
+    let fd: i32 = file_open_write(path);
+    if (fd < 0) { return -1; }
+    file_write_str(fd, content);
+    file_close(fd);
+    return 0;
+}
