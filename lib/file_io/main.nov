@@ -1,0 +1,8 @@
+// ---------------------------------------------------------------------------
+// file_io - File I/O library for Novus
+// Loader that imports platform-specific implementations
+// ---------------------------------------------------------------------------
+
+module file_io;
+
+import darwin_arm64;
