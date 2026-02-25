@@ -8,6 +8,7 @@ The package manager for the [Novus](https://github.com/MJDaws0n/Novus) programmi
     ```sh
     sudo cp "nox_download" /usr/local/bin/nox
     sudo chmod +x /usr/local/bin/nox
+    sudo xattr -d com.apple.quarantine /usr/local/bin/nox
     ```
 3. Run `nox help` to get started
 
