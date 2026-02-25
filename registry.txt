@@ -9,12 +9,12 @@
 
 # Env
 env=https://github.com/MJDaws0n/novus-env
-env:latest=1.0.0
+env:latest=1.0.1
 env@1.0.0=https://github.com/MJDaws0n/novus-env|main|
 
 # File_io
 file_io=https://github.com/MJDaws0n/novus-file_io
-file_io:latest=1.0.0
+file_io:latest=1.0.1
 file_io@1.0.0=https://github.com/MJDaws0n/novus-file_io|main|
 
 # Maths
@@ -24,25 +24,25 @@ maths@1.0.0=https://github.com/MJDaws0n/novus-maths|main|
 
 # Net
 net=https://github.com/MJDaws0n/novus-net
-net:latest=1.0.0
+net:latest=1.0.1
 net@1.0.0=https://github.com/MJDaws0n/novus-net|main|
 
 # Process
 process=https://github.com/MJDaws0n/novus-process
-process:latest=1.0.0
+process:latest=1.0.1
 process@1.0.0=https://github.com/MJDaws0n/novus-process|main|
 
 # STD
 std=https://github.com/MJDaws0n/novus-std
-std:latest=1.0.0
+std:latest=1.0.1
 std@1.0.0=https://github.com/MJDaws0n/novus-std|main|
 
 # Time
 time=https://github.com/MJDaws0n/novus-time
-time:latest=1.0.0
+time:latest=1.0.1
 time@1.0.0=https://github.com/MJDaws0n/novus-time|main|
 
 # Window
 window=https://github.com/MJDaws0n/novus-window
-window:latest=1.0.0
+window:latest=1.0.1
 window@1.0.0=https://github.com/MJDaws0n/novus-window|main|

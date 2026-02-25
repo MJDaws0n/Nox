@@ -30,8 +30,8 @@ fn get_version() -> str {
 
 ## Bug 3: Functions inside `#if` blocks in imported files are not visible
 
-**Severity:** High
-**Workaround:** Don't use `#if` blocks in library files that need to export functions. Use file-level organisation instead (e.g. separate `darwin_arm64.nov` and `windows_amd64.nov` files).
+**Severity:** High — **FIXED** in Novus V0.1.1
+**Status:** Resolved. The compiler now resolves `#if` blocks in imported files before processing their exports. All Nox library loaders have been updated to use `#if(os == ...)` for automatic platform selection.
 
 When a function is defined inside a `#if(os == "darwin") { ... }` block within an imported file, the function is not visible to the importing file, even when the condition evaluates to true. The same `#if` block works correctly when used in the main file being compiled.
 
