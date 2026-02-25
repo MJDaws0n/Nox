@@ -29,12 +29,12 @@ net@1.0.0=https://github.com/MJDaws0n/novus-net|main|
 
 # Process
 process=https://github.com/MJDaws0n/novus-process
-process:latest=1.0.1
+process:latest=1.0.2
 process@1.0.0=https://github.com/MJDaws0n/novus-process|main|
 
 # STD
 std=https://github.com/MJDaws0n/novus-std
-std:latest=1.0.1
+std:latest=1.1.0
 std@1.0.0=https://github.com/MJDaws0n/novus-std|main|
 
 # Time
