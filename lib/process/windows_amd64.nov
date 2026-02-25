@@ -56,15 +56,13 @@ fn capture_output(exe: str, argv: []u64, max_len: i32) -> str {
     win_call("SetStdHandle", -11, wh);
 
     // STARTUPINFOA (104 bytes)
-    let si: str = "";
-    let k: i32 = 0;
-    while (k < 104) { si = si + "\0"; k = k + 1; }
-    si[0] = 104;  // cbSize
+    let si: str = make_buffer(104);
+    memset(ptr(si), 0, 104);
+    store32(ptr(si), 104);  // cbSize
 
     // PROCESS_INFORMATION (24 bytes)
-    let pi: str = "";
-    k = 0;
-    while (k < 24) { pi = pi + "\0"; k = k + 1; }
+    let pi: str = make_buffer(24);
+    memset(ptr(pi), 0, 24);
 
     win_call("CreateProcessA", 0, cmd, 0, 0, 1, 0, 0, 0, si, pi);
     let ok: u64 = getreg(rax);
@@ -98,7 +96,7 @@ fn capture_output(exe: str, argv: []u64, max_len: i32) -> str {
 
     // Strip trailing newline for single-line output
     let result: str = "";
-    k = 0;
+    let k: i32 = 0;
     let stop: bool = false;
     while (k < bytes_read && !stop) {
         if (buf[k] == '\n' || buf[k] == '\r') {
@@ -116,7 +114,6 @@ fn capture_output(exe: str, argv: []u64, max_len: i32) -> str {
 // ---------------------------------------------------------------------------
 
 fn run_cmd(exe: str, argv: []u64) -> i32 {
-    // Build command from argv
     let cmd: str = "";
     let argc: i32 = array_len_u64(argv);
     let i: i32 = 0;
@@ -128,7 +125,8 @@ fn run_cmd(exe: str, argv: []u64) -> i32 {
         cmd = cmd + arg;
         i = i + 1;
     }
-    return spawn_process_wait(cmd);
+    let result: i32 = spawn_process_wait(cmd);
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -159,14 +157,12 @@ fn capture_output_full(exe: str, argv: []u64, max_len: i32) -> str {
     win_call("SetStdHandle", -11, wh);
     win_call("SetStdHandle", -12, wh);
 
-    let si: str = "";
-    let k: i32 = 0;
-    while (k < 104) { si = si + "\0"; k = k + 1; }
-    si[0] = 104;
+    let si: str = make_buffer(104);
+    memset(ptr(si), 0, 104);
+    store32(ptr(si), 104);
 
-    let pi: str = "";
-    k = 0;
-    while (k < 24) { pi = pi + "\0"; k = k + 1; }
+    let pi: str = make_buffer(24);
+    memset(ptr(pi), 0, 24);
 
     win_call("CreateProcessA", 0, cmd, 0, 0, 1, 0, 0, 0, si, pi);
     let ok: u64 = getreg(rax);
