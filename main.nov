@@ -817,9 +817,12 @@ fn remove_package(name: str) -> i32 {
 
     let status: i32 = 0;
     if (is_windows()) {
-        // Windows: rmdir needs backslashes
         let dest_win: str = "lib\\" + name;
-        status = spawn_process_wait("cmd /c rmdir /s /q " + dest_win);
+        let sh: str = get_sh_path();
+        let c: str = get_sh_flag();
+        let cmd: str = "rmdir /s /q " + dest_win;
+        let av: []u64 = [ptr(sh), ptr(c), ptr(cmd), 0];
+        status = run_cmd(sh, av);
     } else {
         let rm: str = get_rm_path();
         let a1: str = "-rf";
