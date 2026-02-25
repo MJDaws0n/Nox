@@ -24,10 +24,10 @@ nox pull maths
 nox pull maths -v 1.0.0
 
 # Pull a package from a GitHub URL
-nox pull https://github.com/MJDaws0n/GolemMC
+nox pull https://github.com/MJDaws0n/novus-maths
 
 # Pull a specific branch and commit
-nox pull https://github.com/MJDaws0n/GolemMC -b main -c abc123
+nox pull https://github.com/MJDaws0n/novus-maths -b main -c abc123
 
 # List available packages
 nox list
