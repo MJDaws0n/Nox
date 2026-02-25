@@ -7,6 +7,7 @@
 //   nox list                  list available packages in the registry
 //   nox init                  initialise a new novus project
 //   nox check                 check installed packages for updates
+//   nox update                update all installed packages to latest
 //   nox help                  show help
 //   nox version               show version
 //
@@ -710,7 +711,7 @@ fn check_updates(registry: str, conf: str) -> void {
     }
 
     if (has_updates) {
-        print("  use 'nox pull <package> -v <version>' to update");
+        print("  run 'nox update' to update all packages");
     }
 }
 
@@ -955,6 +956,169 @@ fn show_check() -> void {
 }
 
 // ---------------------------------------------------------------------------
+// update all installed packages to their latest registry version
+// ---------------------------------------------------------------------------
+
+fn update_all() -> i32 {
+    let conf: str = load_conf();
+    if (len(conf) == 0) {
+        print("no libraries.conf found - nothing to update");
+        print("use 'nox pull <package>' to install packages");
+        return 1;
+    }
+
+    let installed: str = conf_get_installed(conf);
+    if (len(installed) == 0) {
+        print("no packages installed");
+        return 0;
+    }
+
+    print("fetching package registry...");
+    let registry: str = fetch_registry();
+    if (len(registry) == 0) {
+        print("error: could not fetch package registry");
+        print("check your internet connection and try again");
+        return 1;
+    }
+
+    let n: i32 = csv_count(installed);
+    let updated: i32 = 0;
+    let failed: i32 = 0;
+    let skipped: i32 = 0;
+    let i: i32 = 0;
+
+    print("checking " + i32_to_str(n) + " installed packages...");
+    print("");
+
+    while (i < n) {
+        let pkg: str = csv_get(installed, i);
+        let inst_ver: str = conf_get(conf, pkg, "version");
+        let pkg_url: str = conf_get(conf, pkg, "url");
+        let inst_min: str = conf_get(conf, pkg, "min");
+        let inst_max: str = conf_get(conf, pkg, "max");
+
+        // find registry name for this package
+        let reg_name: str = "";
+        let ri: i32 = 0;
+        let rlen: i32 = len(registry);
+        while (ri < rlen) {
+            let line: str = "";
+            while (ri < rlen && registry[ri] != '\n' && registry[ri] != '\r') {
+                line = line + registry[ri];
+                ri = ri + 1;
+            }
+            if (ri < rlen && registry[ri] == '\r') { ri = ri + 1; }
+            if (ri < rlen && registry[ri] == '\n') { ri = ri + 1; }
+
+            if (len(line) == 0) { continue; }
+            if (line[0] == '#') { continue; }
+
+            let eq: i32 = str_find(line, "=");
+            if (eq < 0) { continue; }
+            let lkey: str = substr_len(line, 0, eq);
+            let lval: str = substr(line, eq + 1);
+
+            if (lval == pkg_url && !str_contains(lkey, "@") && !str_contains(lkey, ":")) {
+                reg_name = lkey;
+            }
+        }
+
+        if (len(reg_name) == 0) {
+            print("  " + pkg + " - not in registry, skipping");
+            skipped = skipped + 1;
+            i = i + 1;
+            continue;
+        }
+
+        let latest_ver: str = registry_lookup(registry, reg_name + ":latest");
+        if (len(latest_ver) == 0) {
+            print("  " + pkg + " v" + inst_ver + " - no latest version found, skipping");
+            skipped = skipped + 1;
+            i = i + 1;
+            continue;
+        }
+
+        let cmp: i32 = version_compare(latest_ver, inst_ver);
+        if (cmp <= 0) {
+            print("  " + pkg + " v" + inst_ver + " - already up to date");
+            skipped = skipped + 1;
+            i = i + 1;
+            continue;
+        }
+
+        if (!version_satisfies(latest_ver, inst_min, inst_max)) {
+            print("  " + pkg + " v" + inst_ver + " - v" + latest_ver + " available but outside constraints, skipping");
+            skipped = skipped + 1;
+            i = i + 1;
+            continue;
+        }
+
+        print("  " + pkg + " v" + inst_ver + " -> v" + latest_ver + " updating...");
+
+        // look up the versioned entry for the latest version
+        let versioned_key: str = reg_name + "@" + latest_ver;
+        let versioned_val: str = registry_lookup(registry, versioned_key);
+
+        let pull_url: str = pkg_url;
+        let pull_branch: str = "";
+        let pull_commit: str = "";
+
+        if (len(versioned_val) > 0) {
+            pull_url = pipe_field(versioned_val, 0);
+            pull_branch = pipe_field(versioned_val, 1);
+            pull_commit = pipe_field(versioned_val, 2);
+        }
+
+        // remove old version
+        let dest: str = "lib/" + pkg;
+        let rm: str = "/bin/rm";
+        let a1: str = "-rf";
+        let av: []u64 = [ptr(rm), ptr(a1), ptr(dest), 0];
+        let rm_status: i32 = run_cmd(rm, av);
+
+        if (rm_status != 0) {
+            print("    error: could not remove old " + pkg);
+            failed = failed + 1;
+            i = i + 1;
+            continue;
+        }
+
+        // clone new version
+        let clone_ok: i32 = smart_clone(pull_url, dest, pull_branch, pull_commit, true);
+        if (clone_ok != 0) {
+            print("    error: failed to pull " + pkg + " v" + latest_ver);
+            failed = failed + 1;
+            i = i + 1;
+            continue;
+        }
+
+        // update conf
+        let actual_branch: str = git_get_branch(dest);
+        let actual_commit: str = git_get_commit(dest);
+        conf = conf_remove_package(conf, pkg);
+        conf = conf_add_package(conf, pkg, pull_url, latest_ver, actual_branch, actual_commit, inst_min, inst_max);
+
+        updated = updated + 1;
+        i = i + 1;
+    }
+
+    save_conf(conf);
+
+    print("");
+    if (updated > 0) {
+        print(i32_to_str(updated) + " packages updated");
+    }
+    if (failed > 0) {
+        print(i32_to_str(failed) + " packages failed");
+    }
+    if (updated == 0 && failed == 0) {
+        print("all packages are up to date");
+    }
+
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // initialise a new novus project
 // ---------------------------------------------------------------------------
 
@@ -1086,6 +1250,7 @@ fn show_help() -> void {
     print("  nox remove <package>           remove a package from lib/");
     print("  nox list                       list available packages");
     print("  nox check                      check installed packages for updates");
+    print("  nox update                     update all installed packages to latest");
     print("  nox init                       initialise a new novus project");
     print("  nox help                       show this help message");
     print("  nox version                    show version info");
@@ -1104,6 +1269,7 @@ fn show_help() -> void {
     print("  nox remove std");
     print("  nox list");
     print("  nox check");
+    print("  nox update");
     print("  nox init");
     print("");
 }
@@ -1147,6 +1313,12 @@ fn main(argc: i32, argv: u64) -> i32 {
     if (cmd == "check") {
         show_check();
         return 0;
+    }
+
+    // update
+    if (cmd == "update") {
+        let result: i32 = update_all();
+        return result;
     }
 
     // init
