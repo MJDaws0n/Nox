@@ -2,9 +2,14 @@
 // env - environment and system utilities
 //
 // Platform files: darwin_arm64, windows_amd64, windows_x86
-// To use on Windows, change import below to the Windows variant.
+// Automatically selects the correct platform at compile time.
 // ---------------------------------------------------------------------------
 
 module env_main;
 
-import darwin_arm64;
+#if(os == "darwin") {
+    import darwin_arm64;
+}
+#if(os == "windows") {
+    import windows_amd64;
+}

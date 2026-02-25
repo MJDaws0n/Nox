@@ -10,12 +10,19 @@
 //   windows_x86           - Windows x86 (32-bit)
 //   memory_windows_x86    - memory ops for Windows x86 (32-bit)
 //
-// To use on Windows, change imports below to the Windows variants.
+// Automatically selects the correct platform at compile time.
 // ---------------------------------------------------------------------------
 
 module std;
 
 import core;
 import strings;
-import darwin_arm64;
-import memory_darwin_arm64;
+
+#if(os == "darwin") {
+    import darwin_arm64;
+    import memory_darwin_arm64;
+}
+#if(os == "windows") {
+    import windows_amd64;
+    import memory_windows_amd64;
+}
