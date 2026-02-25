@@ -40,6 +40,38 @@ fn get_conf_name() -> str {
 }
 
 // ---------------------------------------------------------------------------
+// platform-specific paths (selected at compile time)
+// ---------------------------------------------------------------------------
+
+#if(os == "darwin") {
+    fn get_git_path() -> str { return "/usr/bin/git"; }
+    fn get_curl_path() -> str { return "/usr/bin/curl"; }
+    fn get_tmp_prefix() -> str { return "/tmp/"; }
+    fn get_sh_path() -> str { return "/bin/sh"; }
+    fn get_sh_flag() -> str { return "-c"; }
+    fn get_rm_path() -> str { return "/bin/rm"; }
+    fn is_windows() -> bool { return false; }
+}
+#if(os == "windows") {
+    fn get_git_path() -> str { return "git"; }
+    fn get_curl_path() -> str { return "curl"; }
+    fn get_tmp_prefix() -> str { return ""; }
+    fn get_sh_path() -> str { return "cmd.exe"; }
+    fn get_sh_flag() -> str { return "/c"; }
+    fn get_rm_path() -> str { return "cmd.exe"; }
+    fn is_windows() -> bool { return true; }
+}
+#if(os == "linux") {
+    fn get_git_path() -> str { return "git"; }
+    fn get_curl_path() -> str { return "curl"; }
+    fn get_tmp_prefix() -> str { return "/tmp/"; }
+    fn get_sh_path() -> str { return "/bin/sh"; }
+    fn get_sh_flag() -> str { return "-c"; }
+    fn get_rm_path() -> str { return "/bin/rm"; }
+    fn is_windows() -> bool { return false; }
+}
+
+// ---------------------------------------------------------------------------
 // libraries.conf parsing helpers
 // format: pkg:Name:field=value lines, plus installed=A,B,C header
 // ---------------------------------------------------------------------------
@@ -287,9 +319,9 @@ fn pipe_field(value: str, index: i32) -> str {
 
 fn fetch_registry() -> str {
     let url: str = get_registry_url();
-    let tmp: str = "/tmp/nox_registry.txt";
+    let tmp: str = get_tmp_prefix() + "nox_registry.txt";
 
-    let curl: str = "/usr/bin/curl";
+    let curl: str = get_curl_path();
     let a1: str = "-s";
     let a2: str = "-f";
     let a3: str = "-L";
@@ -386,16 +418,17 @@ fn is_safe_name(name: str) -> bool {
 // ---------------------------------------------------------------------------
 
 fn do_clone_shallow(url: str, dest: str) -> i32 {
-    let git: str = "/usr/bin/git";
+    let git: str = get_git_path();
     let a1: str = "clone";
     let a2: str = "--depth";
     let a3: str = "1";
     let av: []u64 = [ptr(git), ptr(a1), ptr(a2), ptr(a3), ptr(url), ptr(dest), 0];
-    return run_cmd(git, av);
+    let result: i32 = run_cmd(git, av);
+    return result;
 }
 
 fn do_clone_shallow_branch(url: str, dest: str, branch: str) -> i32 {
-    let git: str = "/usr/bin/git";
+    let git: str = get_git_path();
     let a1: str = "clone";
     let a2: str = "--depth";
     let a3: str = "1";
@@ -405,14 +438,14 @@ fn do_clone_shallow_branch(url: str, dest: str, branch: str) -> i32 {
 }
 
 fn do_clone_full(url: str, dest: str) -> i32 {
-    let git: str = "/usr/bin/git";
+    let git: str = get_git_path();
     let a1: str = "clone";
     let av: []u64 = [ptr(git), ptr(a1), ptr(url), ptr(dest), 0];
     return run_cmd(git, av);
 }
 
 fn do_clone_full_branch(url: str, dest: str, branch: str) -> i32 {
-    let git: str = "/usr/bin/git";
+    let git: str = get_git_path();
     let a1: str = "clone";
     let a2: str = "--branch";
     let av: []u64 = [ptr(git), ptr(a1), ptr(a2), ptr(branch), ptr(url), ptr(dest), 0];
@@ -420,7 +453,7 @@ fn do_clone_full_branch(url: str, dest: str, branch: str) -> i32 {
 }
 
 fn do_checkout(dest: str, commit: str) -> i32 {
-    let git: str = "/usr/bin/git";
+    let git: str = get_git_path();
     let a1: str = "-C";
     let a2: str = "checkout";
     let av: []u64 = [ptr(git), ptr(a1), ptr(dest), ptr(a2), ptr(commit), 0];
@@ -428,7 +461,7 @@ fn do_checkout(dest: str, commit: str) -> i32 {
 }
 
 fn git_get_branch(dest: str) -> str {
-    let git: str = "/usr/bin/git";
+    let git: str = get_git_path();
     let a1: str = "-C";
     let a2: str = "rev-parse";
     let a3: str = "--abbrev-ref";
@@ -438,7 +471,7 @@ fn git_get_branch(dest: str) -> str {
 }
 
 fn git_get_commit(dest: str) -> str {
-    let git: str = "/usr/bin/git";
+    let git: str = get_git_path();
     let a1: str = "-C";
     let a2: str = "rev-parse";
     let a3: str = "HEAD";
@@ -448,7 +481,6 @@ fn git_get_commit(dest: str) -> str {
 
 // clone with optional branch/commit, returns 0 on success
 fn smart_clone(url: str, dest: str, branch: str, commit: str, shallow: bool) -> i32 {
-    // if commit specified, don't use shallow (commit might not be HEAD)
     let use_shallow: bool = shallow;
     if (len(commit) > 0) { use_shallow = false; }
 
@@ -466,7 +498,6 @@ fn smart_clone(url: str, dest: str, branch: str, commit: str, shallow: bool) -> 
 
     if (status != 0) { return status; }
 
-    // checkout specific commit if requested
     if (len(commit) > 0) {
         return do_checkout(dest, commit);
     }
@@ -501,10 +532,17 @@ fn get_pkg_version(dest: str) -> str {
 // ---------------------------------------------------------------------------
 
 fn find_dep_manifests(root: str) -> str {
-    let tmp: str = "/tmp/nox_dep_manifests.txt";
-    let sh: str = "/bin/sh";
-    let c: str = "-c";
-    let cmd: str = "find " + root + " -name " + get_conf_name() + " -type f > " + tmp;
+    let tmp: str = get_tmp_prefix() + "nox_dep_manifests.txt";
+    let sh: str = get_sh_path();
+    let c: str = get_sh_flag();
+    let cmd: str = "";
+
+    if (is_windows()) {
+        cmd = "dir /s /b " + root + "\\" + get_conf_name() + " 2>nul > " + tmp;
+    } else {
+        cmd = "find " + root + " -name " + get_conf_name() + " -type f > " + tmp;
+    }
+
     let av: []u64 = [ptr(sh), ptr(c), ptr(cmd), 0];
 
     let status: i32 = run_cmd(sh, av);
@@ -776,10 +814,17 @@ fn remove_package(name: str) -> i32 {
         return 1;
     }
 
-    let rm: str = "/bin/rm";
-    let a1: str = "-rf";
-    let av: []u64 = [ptr(rm), ptr(a1), ptr(dest), 0];
-    let status: i32 = run_cmd(rm, av);
+    let status: i32 = 0;
+    if (is_windows()) {
+        // Windows: rmdir needs backslashes
+        let dest_win: str = "lib\\" + name;
+        status = spawn_process_wait("cmd /c rmdir /s /q " + dest_win);
+    } else {
+        let rm: str = get_rm_path();
+        let a1: str = "-rf";
+        let av: []u64 = [ptr(rm), ptr(a1), ptr(dest), 0];
+        status = run_cmd(rm, av);
+    }
 
     if (status != 0) {
         print("error: could not remove " + name);
@@ -983,16 +1028,11 @@ fn init_project() -> i32 {
         let t: str = "";
         t = t + "module my_project;\n";
         t = t + "\n";
-        t = t + "// Uncomment to use the standard library\n";
-        t = t + "// import lib/std;\n";
+        t = t + "import lib/std;\n";
         t = t + "\n";
         t = t + "fn main() -> i32 {\n";
-        t = t + "    // You can only use this line when using std library\n";
-        t = t + "    // exit(0);\n\n";
-        t = t + "    // Exit program without using std library - Macos Silicon only\n";
-        t = t + "    mov(x0, 0);\n";
-        t = t + "    mov(x16, 0x2000001);\n";
-        t = t + "    syscall();\n";
+        t = t + "    print(\"Hello, world!\");\n";
+        t = t + "    exit(0);\n";
         t = t + "    return 0;\n";
         t = t + "}\n";
 
@@ -1077,6 +1117,7 @@ fn show_version() -> void {
 // ---------------------------------------------------------------------------
 
 fn main(argc: i32, argv: u64) -> i32 {
+    show_banner();
     if (argc < 2) {
         show_help();
         return 0;
