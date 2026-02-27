@@ -46,3 +46,8 @@ time@1.0.0=https://github.com/MJDaws0n/novus-time|main|
 window=https://github.com/MJDaws0n/novus-window
 window:latest=1.0.1
 window@1.0.0=https://github.com/MJDaws0n/novus-window|main|
+
+# HTTP
+http=https://github.com/MJDaws0n/novus-http
+http:latest=1.0.1
+http@1.0.0=https://github.com/MJDaws0n/novus-http|main|
