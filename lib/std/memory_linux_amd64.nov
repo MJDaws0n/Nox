@@ -1,0 +1,173 @@
+// ---------------------------------------------------------------------------
+// std/memory_linux_amd64 - memory & buffer ops (Linux x86_64)
+// Linux pipe() returns fds via memory buffer, not registers.
+// ---------------------------------------------------------------------------
+
+module std_memory_linux_amd64;
+
+import core;
+import strings;
+import linux_amd64;
+
+fn make_buffer(size: i32) -> str {
+    if (size <= 0) { return ""; }
+    let buf: str = "        ";
+    while (len(buf) < size) {
+        buf = buf + buf;
+    }
+    if (len(buf) > size) {
+        let pa: u64 = ptr(buf);
+        return copy_bytes_raw(pa, size);
+    }
+    return buf;
+}
+
+// Linux pipe(int pipefd[2]) - syscall 22
+// Returns 0 on success, fds stored in the buffer
+fn copy_bytes_raw(src: u64, length: i32) -> str {
+    if (length <= 0) { return ""; }
+    let buf: str = "";
+    let j: i32 = 0;
+    while (j < length) { buf = buf + " "; j = j + 1; }
+    let ulen: u64 = i32_to_u64(length);
+
+    // pipe() on Linux: pass pointer to 8-byte buffer for [rfd, wfd]
+    let pipebuf: str = "\0\0\0\0\0\0\0\0";
+    mov(rax, 22);      // SYS_pipe
+    mov(rdi, pipebuf);
+    syscall();
+    let pb: u64 = ptr(pipebuf);
+    let rfd: i32 = load32(pb);
+    let wfd: i32 = load32(pb + 4);
+
+    // write src data to pipe
+    mov(rax, 1);       // SYS_write
+    mov(rdi, wfd);
+    mov(rsi, src);
+    mov(rdx, ulen);
+    syscall();
+
+    // close write end
+    mov(rax, 3);       // SYS_close
+    mov(rdi, wfd);
+    syscall();
+
+    // read from pipe into buf
+    mov(rax, 0);       // SYS_read
+    mov(rdi, rfd);
+    mov(rsi, buf);
+    mov(rdx, ulen);
+    syscall();
+
+    // close read end
+    mov(rax, 3);       // SYS_close
+    mov(rdi, rfd);
+    syscall();
+
+    return buf;
+}
+
+fn copy_bytes(src: u64, length: i32) -> str {
+    if (length <= 0) { return ""; }
+    let buf: str = "";
+    let j: i32 = 0;
+    while (j < length) { buf = buf + " "; j = j + 1; }
+    let ulen: u64 = i32_to_u64(length);
+
+    let pipebuf: str = "\0\0\0\0\0\0\0\0";
+    mov(rax, 22);      // SYS_pipe
+    mov(rdi, pipebuf);
+    syscall();
+    let pb: u64 = ptr(pipebuf);
+    let rfd: i32 = load32(pb);
+    let wfd: i32 = load32(pb + 4);
+
+    mov(rax, 1);       // SYS_write
+    mov(rdi, wfd);
+    mov(rsi, src);
+    mov(rdx, ulen);
+    syscall();
+
+    mov(rax, 3);       // SYS_close
+    mov(rdi, wfd);
+    syscall();
+
+    mov(rax, 0);       // SYS_read
+    mov(rdi, rfd);
+    mov(rsi, buf);
+    mov(rdx, ulen);
+    syscall();
+
+    mov(rax, 3);       // SYS_close
+    mov(rdi, rfd);
+    syscall();
+
+    return buf;
+}
+
+fn cstr_to_str(addr: u64) -> str {
+    let slen: u64 = cstr_len(addr);
+    if (slen == 0) { return ""; }
+    return copy_bytes(addr, u64_to_i32(slen));
+}
+
+fn byte_at(s: str, i: i32) -> i32 {
+    return read_byte(ptr(s) + i32_to_u64(i));
+}
+
+fn argv_get(argv: u64, index: i32) -> str {
+    let offset: u64 = i32_to_u64(index) * 8;
+    let addr: u64 = i64_to_u64(load64(argv + offset));
+    return cstr_to_str(addr);
+}
+
+// Write a single byte to a raw memory address using the pipe trick
+fn store8(addr: u64, val: i32) -> void {
+    let tmp: str = "\0";
+    tmp[0] = ((val % 256) + 256) % 256;
+
+    let pipebuf: str = "\0\0\0\0\0\0\0\0";
+    mov(rax, 22);      // SYS_pipe
+    mov(rdi, pipebuf);
+    syscall();
+    let pb: u64 = ptr(pipebuf);
+    let rfd: i32 = load32(pb);
+    let wfd: i32 = load32(pb + 4);
+
+    mov(rax, 1);       // SYS_write
+    mov(rdi, wfd);
+    mov(rsi, tmp);
+    mov(rdx, 1);
+    syscall();
+
+    mov(rax, 3);       // SYS_close
+    mov(rdi, wfd);
+    syscall();
+
+    mov(rax, 0);       // SYS_read
+    mov(rdi, rfd);
+    mov(rsi, addr);
+    mov(rdx, 1);
+    syscall();
+
+    mov(rax, 3);       // SYS_close
+    mov(rdi, rfd);
+    syscall();
+}
+
+// Write a 32-bit value to a raw memory address (little-endian)
+fn store32(addr: u64, val: i32) -> void {
+    store8(addr, val % 256);
+    store8(addr + 1, (val / 256) % 256);
+    store8(addr + 2, (val / 65536) % 256);
+    store8(addr + 3, (val / 16777216) % 256);
+}
+
+// Fill a memory region with a byte value
+fn memset(addr: u64, val: i32, count: i32) -> void {
+    let i: i32 = 0;
+    while (i < count) {
+        store8(addr + i32_to_u64(i), val);
+        i = i + 1;
+    }
+}
