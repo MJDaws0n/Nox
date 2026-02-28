@@ -13,3 +13,6 @@ module env_main;
 #if(os == "windows") {
     import windows_amd64;
 }
+#if(os == "linux") {
+    import linux_amd64;
+}

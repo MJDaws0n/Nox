@@ -1,0 +1,138 @@
+// ---------------------------------------------------------------------------
+// std/linux_amd64 - Linux x86_64 platform layer
+// Linux syscall convention: rax=syscall#, rdi/rsi/rdx/r10/r8/r9=args
+// ---------------------------------------------------------------------------
+
+module std_linux_amd64;
+
+import core;
+
+fn i32_to_u64(val: i32) -> u64 {
+    mov(rdi, val);
+    return getreg(rdi);
+}
+
+fn i64_to_u64(val: i64) -> u64 {
+    mov(rdi, val);
+    return getreg(rdi);
+}
+
+fn u64_to_i64(val: u64) -> i64 {
+    mov(rdi, val);
+    return getreg(rdi);
+}
+
+fn array_len(arr: []i32) -> i32 {
+    mov(rdi, arr);
+    let hdr: u64 = getreg(rdi);
+    return load32(hdr + 8);
+}
+
+fn array_len_u64(arr: []u64) -> i32 {
+    mov(rdi, arr);
+    let hdr: u64 = getreg(rdi);
+    return load32(hdr + 8);
+}
+
+fn print(msg: str) -> void {
+    msg = msg + "\n";
+    mov(rax, 1);       // SYS_write
+    mov(rdi, 1);       // fd = stdout
+    mov(rsi, msg);
+    mov(rdx, len(msg));
+    syscall();
+}
+
+fn print_raw(msg: str) -> void {
+    mov(rax, 1);       // SYS_write
+    mov(rdi, 1);       // fd = stdout
+    mov(rsi, msg);
+    mov(rdx, len(msg));
+    syscall();
+}
+
+fn exit(code: i32) -> void {
+    mov(rax, 60);      // SYS_exit
+    mov(rdi, code);
+    syscall();
+}
+
+fn get_time_ns() -> i64 {
+    let buf: str = "0123456789abcdef";
+    mov(rax, 228);     // SYS_clock_gettime
+    mov(rdi, 0);       // CLOCK_REALTIME
+    mov(rsi, buf);
+    syscall();
+    mov(rdi, buf);
+    let base: u64 = getreg(rdi);
+    let tv_sec: i64 = load64(base);
+    let tv_nsec: i64 = load64(base + 8);
+    return tv_sec * 1000000000 + tv_nsec;
+}
+
+fn input(prompt: str, buf_len: i32 = 128) -> str {
+    mov(rax, 1);
+    mov(rdi, 1);
+    mov(rsi, prompt);
+    mov(rdx, len(prompt));
+    syscall();
+    let buf: str = "";
+    while(len(buf) < buf_len) {
+        buf = buf + " ";
+    }
+    mov(rax, 0);       // SYS_read
+    mov(rdi, 0);       // fd = stdin
+    mov(rsi, buf);
+    mov(rdx, buf_len);
+    syscall();
+    let nread: i32 = u64_to_i32(getreg(rax));
+    let out: str = "";
+    let i: i32 = 0;
+    while (i < nread) {
+        if (buf[i] == '\n') {
+            break;
+        }
+        out = out + buf[i];
+        i = i + 1;
+    }
+    return out;
+}
+
+fn ptr(s: str) -> u64 {
+    mov(rdi, s);
+    return getreg(rdi);
+}
+
+fn array_data_ptr_u64(arr: []u64) -> i64 {
+    mov(rdi, arr);
+    let hdr: u64 = getreg(rdi);
+    return load64(hdr);
+}
+
+fn execve_raw(path: str, argv: []u64) -> i32 {
+    let argv_ptr: i64 = array_data_ptr_u64(argv);
+    let envp: []u64 = [0];
+    let envp_ptr: i64 = array_data_ptr_u64(envp);
+    mov(rax, 59);      // SYS_execve
+    mov(rdi, path);
+    mov(rsi, argv_ptr);
+    mov(rdx, envp_ptr);
+    syscall();
+    return u64_to_i32(getreg(rax));
+}
+
+fn fork() -> i32 {
+    mov(rax, 57);      // SYS_fork
+    syscall();
+    return u64_to_i32(getreg(rax));
+}
+
+fn spawn_execve(path: str, argv: []u64) -> i32 {
+    let pid: i32 = fork();
+    if (pid == 0) {
+        execve_raw(path, argv);
+        exit(1);
+        return 1;
+    }
+    return pid;
+}
