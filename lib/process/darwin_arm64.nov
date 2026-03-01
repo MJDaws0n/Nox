@@ -156,3 +156,19 @@ fn shell_output(cmd: str, max_len: i32) -> str {
     let av: []u64 = [ptr(sh), ptr(flag), ptr(cmd), 0];
     return capture_output(sh, av, max_len);
 }
+
+// ---------------------------------------------------------------------------
+// Non-blocking waitpid to reap zombie children
+// waitpid(-1, &st, WNOHANG=1)
+// ---------------------------------------------------------------------------
+
+fn waitpid_nohang() -> void {
+    let st: i32 = 0;
+    let sa: u64 = &st;
+    mov(x0, -1);
+    mov(x1, sa);
+    mov(x2, 1);
+    mov(x3, 0);
+    mov(x16, 0x2000007);  // SYS_wait4 on Darwin
+    syscall();
+}

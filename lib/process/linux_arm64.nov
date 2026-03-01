@@ -1,9 +1,10 @@
 // ---------------------------------------------------------------------------
-// process/linux_amd64 - Process utilities for Linux x86_64
-// Linux syscall convention: rax=syscall#, rdi/rsi/rdx/r10/r8/r9=args
+// process/linux_arm64 - Process utilities for Linux ARM64 (aarch64)
+// Uses clone(SIGCHLD,0,0,0,0) instead of fork, dup3 instead of dup2,
+// wait4 (compat syscall 260)
 // ---------------------------------------------------------------------------
 
-module process_linux_amd64;
+module process_linux_arm64;
 
 import ../std;
 import ../file_io;
@@ -15,11 +16,11 @@ import ../file_io;
 fn wait_pid(pid: i32) -> i32 {
     let st: i32 = 0;
     let sa: u64 = &st;
-    mov(rax, 61);      // SYS_wait4
-    mov(rdi, pid);
-    mov(rsi, sa);
-    mov(rdx, 0);
-    mov(r10, 0);
+    mov(x0, pid);
+    mov(x1, sa);
+    mov(x2, 0);
+    mov(x3, 0);
+    mov(x8, 260);      // SYS_wait4
     syscall();
     return st;
 }
@@ -152,16 +153,16 @@ fn shell_output(cmd: str, max_len: i32) -> str {
 
 // ---------------------------------------------------------------------------
 // Non-blocking waitpid to reap zombie children
-// wait4(-1, &st, WNOHANG=1, NULL) on Linux x86_64
+// wait4(-1, &st, WNOHANG=1, NULL) on Linux ARM64
 // ---------------------------------------------------------------------------
 
 fn waitpid_nohang() -> void {
     let st: i32 = 0;
     let sa: u64 = &st;
-    mov(rax, 61);      // SYS_wait4
-    mov(rdi, -1);
-    mov(rsi, sa);
-    mov(rdx, 1);       // WNOHANG
-    mov(r10, 0);       // rusage = NULL
+    mov(x0, -1);       // pid = -1 (any child)
+    mov(x1, sa);       // &status
+    mov(x2, 1);        // WNOHANG
+    mov(x3, 0);        // rusage = NULL
+    mov(x8, 260);      // SYS_wait4
     syscall();
 }

@@ -27,6 +27,5 @@ import strings;
     import memory_windows_amd64;
 }
 #if(os == "linux") {
-    import linux_amd64;
-    import memory_linux_amd64;
+    import linux;
 }

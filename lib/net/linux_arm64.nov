@@ -1,0 +1,458 @@
+// ---------------------------------------------------------------------------
+// net/linux_arm64 - TCP networking for Linux ARM64 (aarch64)
+// Linux ARM64 syscall: x8=syscall#, x0-x5=args, return in x0
+// No poll() on ARM64 — uses ppoll() (syscall 73)
+// ---------------------------------------------------------------------------
+
+module net_linux_arm64;
+
+import ../std;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn to_u8_net(v: i32) -> i32 {
+    return ((v % 256) + 256) % 256;
+}
+
+// Write a single byte to a raw memory address (pipe trick)
+fn net_store8(addr: u64, val: i32) -> void {
+    let tmp: str = "\0";
+    tmp[0] = to_u8_net(val);
+
+    let pipebuf: str = "\0\0\0\0\0\0\0\0";
+    mov(x0, pipebuf);
+    mov(x1, 0);        // flags = 0
+    mov(x8, 59);       // SYS_pipe2
+    syscall();
+    let pb: u64 = ptr(pipebuf);
+    let rfd: i32 = load32(pb);
+    let wfd: i32 = load32(pb + 4);
+
+    mov(x0, wfd);
+    mov(x1, tmp);
+    mov(x2, 1);
+    mov(x8, 64);       // SYS_write
+    syscall();
+
+    mov(x0, wfd);
+    mov(x8, 57);       // SYS_close
+    syscall();
+
+    mov(x0, rfd);
+    mov(x1, addr);
+    mov(x2, 1);
+    mov(x8, 63);       // SYS_read
+    syscall();
+
+    mov(x0, rfd);
+    mov(x8, 57);       // SYS_close
+    syscall();
+}
+
+// Pre-allocated null-filled buffer for network I/O
+fn net_make_buf(size: i32) -> str {
+    let buf: str = "";
+    let i: i32 = 0;
+    while (i < size) {
+        buf = buf + "\0";
+        i = i + 1;
+    }
+    return buf;
+}
+
+// Write a 32-bit little-endian value into a buffer at offset
+fn net_write_i32_le(buf: str, offset: i32, val: i32) -> void {
+    let v: i32 = val;
+    let i: i32 = 0;
+    while (i < 4) {
+        buf[offset + i] = to_u8_net(v % 256);
+        v = v / 256;
+        i = i + 1;
+    }
+}
+
+// Write a 16-bit big-endian value into a buffer at offset
+fn net_write_i16_be(buf: str, offset: i32, val: i32) -> void {
+    buf[offset] = to_u8_net(val / 256);
+    buf[offset + 1] = to_u8_net(val % 256);
+}
+
+// ---------------------------------------------------------------------------
+// sockaddr_in struct builder (16 bytes)
+// Linux sockaddr_in: no sin_len field, AF_INET at offset 0-1 (16-bit)
+// ---------------------------------------------------------------------------
+
+fn make_sockaddr_in(port: i32) -> str {
+    let buf: str = "";
+    let i: i32 = 0;
+    while (i < 16) {
+        buf = buf + "\0";
+        i = i + 1;
+    }
+    // sin_family = AF_INET = 2 (little-endian 16-bit)
+    buf[0] = to_u8_net(2);
+    buf[1] = to_u8_net(0);
+    // sin_port (big-endian 16-bit)
+    buf[2] = to_u8_net(port / 256);
+    buf[3] = to_u8_net(port % 256);
+    return buf;
+}
+
+// Build sockaddr_in for a specific IPv4 address (a.b.c.d)
+fn make_sockaddr_in_addr(a: i32, b: i32, c: i32, d: i32, port: i32) -> str {
+    let buf: str = make_sockaddr_in(port);
+    buf[4] = to_u8_net(a);
+    buf[5] = to_u8_net(b);
+    buf[6] = to_u8_net(c);
+    buf[7] = to_u8_net(d);
+    return buf;
+}
+
+// ---------------------------------------------------------------------------
+// Socket creation - AF_INET=2, SOCK_STREAM=1
+// ---------------------------------------------------------------------------
+
+fn net_socket() -> i32 {
+    mov(x0, 2);        // AF_INET
+    mov(x1, 1);        // SOCK_STREAM
+    mov(x2, 0);        // protocol
+    mov(x8, 198);      // SYS_socket
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// ---------------------------------------------------------------------------
+// Socket options
+// ---------------------------------------------------------------------------
+
+fn net_set_reuse(fd: i32) -> i32 {
+    let one: i32 = 1;
+    let one_addr: u64 = &one;
+    mov(x0, fd);
+    mov(x1, 1);        // SOL_SOCKET
+    mov(x2, 2);        // SO_REUSEADDR
+    mov(x3, one_addr);
+    mov(x4, 4);
+    mov(x8, 208);      // SYS_setsockopt
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// Linux does not have SO_NOSIGPIPE; use MSG_NOSIGNAL on send or ignore SIGPIPE
+fn net_set_nosigpipe(fd: i32) -> i32 {
+    return 0;
+}
+
+fn net_set_nonblock(fd: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, 3);        // F_GETFL
+    mov(x2, 0);
+    mov(x8, 25);       // SYS_fcntl
+    syscall();
+    let flags: i32 = u64_to_i32(getreg(x0));
+
+    // O_NONBLOCK = 0x800 = 2048 on Linux
+    let new_flags: i32 = flags;
+    if ((flags / 2048) % 2 == 0) {
+        new_flags = flags + 2048;
+    }
+    mov(x0, fd);
+    mov(x1, 4);        // F_SETFL
+    mov(x2, new_flags);
+    mov(x8, 25);       // SYS_fcntl
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_set_keepalive(fd: i32) -> i32 {
+    let one: i32 = 1;
+    let one_addr: u64 = &one;
+    mov(x0, fd);
+    mov(x1, 1);        // SOL_SOCKET
+    mov(x2, 9);        // SO_KEEPALIVE
+    mov(x3, one_addr);
+    mov(x4, 4);
+    mov(x8, 208);      // SYS_setsockopt
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// ---------------------------------------------------------------------------
+// Bind / Listen / Accept (server)
+// ---------------------------------------------------------------------------
+
+fn net_bind(fd: i32, port: i32) -> i32 {
+    let addr: str = make_sockaddr_in(port);
+    mov(x0, addr);
+    let addr_ptr: u64 = getreg(x0);
+    mov(x0, fd);
+    mov(x1, addr_ptr);
+    mov(x2, 16);
+    mov(x8, 200);      // SYS_bind
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_listen(fd: i32, backlog: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, backlog);
+    mov(x8, 201);      // SYS_listen
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_accept(fd: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, 0);
+    mov(x2, 0);
+    mov(x8, 202);      // SYS_accept
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// ---------------------------------------------------------------------------
+// Connect (client)
+// ---------------------------------------------------------------------------
+
+fn net_connect(fd: i32, a: i32, b: i32, c: i32, d: i32, port: i32) -> i32 {
+    let addr: str = make_sockaddr_in_addr(a, b, c, d, port);
+    mov(x0, addr);
+    let addr_ptr: u64 = getreg(x0);
+    mov(x0, fd);
+    mov(x1, addr_ptr);
+    mov(x2, 16);
+    mov(x8, 203);      // SYS_connect
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// Connect to localhost on a given port
+fn net_connect_local(port: i32) -> i32 {
+    let fd: i32 = net_socket();
+    if (fd < 0) { return -1; }
+    let rc: i32 = net_connect(fd, 127, 0, 0, 1, port);
+    if (rc != 0) {
+        net_close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+// ---------------------------------------------------------------------------
+// Read / Write
+// ---------------------------------------------------------------------------
+
+fn net_read(fd: i32, buf: str, max_len: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, buf);
+    mov(x2, max_len);
+    mov(x8, 63);       // SYS_read
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_read_safe(fd: i32, buf: str, max_len: i32) -> i32 {
+    let avail: i32 = net_bytes_available(fd);
+    if (avail <= 0) {
+        let alive: i32 = net_poll_read(fd, 0);
+        if (alive < 0) { return -1; }
+        if (alive == 0) { return 0; }
+        return -1;
+    }
+    let to_read: i32 = max_len;
+    if (to_read > avail) { to_read = avail; }
+    mov(x0, fd);
+    mov(x1, buf);
+    mov(x2, to_read);
+    mov(x8, 63);       // SYS_read
+    syscall();
+    let nr: i32 = u64_to_i32(getreg(x0));
+    if (nr > 0 && nr <= to_read) { return nr; }
+    return -1;
+}
+
+fn net_write(fd: i32, data: str, length: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, data);
+    mov(x2, length);
+    mov(x8, 64);       // SYS_write
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+fn net_write_str(fd: i32, s: str) -> i32 {
+    return net_write(fd, s, len(s));
+}
+
+fn net_write_line(fd: i32, s: str) -> i32 {
+    let line: str = s + "\n";
+    return net_write(fd, line, len(line));
+}
+
+// ---------------------------------------------------------------------------
+// Close
+// ---------------------------------------------------------------------------
+
+fn net_close(fd: i32) -> void {
+    mov(x0, fd);
+    mov(x8, 57);       // SYS_close
+    syscall();
+}
+
+fn net_shutdown(fd: i32, how: i32) -> i32 {
+    mov(x0, fd);
+    mov(x1, how);
+    mov(x8, 210);      // SYS_shutdown
+    syscall();
+    return u64_to_i32(getreg(x0));
+}
+
+// ---------------------------------------------------------------------------
+// Poll & status (uses ppoll on ARM64 — no poll syscall)
+// ---------------------------------------------------------------------------
+
+fn net_poll_read(fd: i32, timeout_ms: i32) -> i32 {
+    let pfd: str = "\0\0\0\0\0\0\0\0";
+    pfd[0] = to_u8_net(fd % 256);
+    pfd[1] = to_u8_net((fd / 256) % 256);
+    pfd[2] = to_u8_net((fd / 65536) % 256);
+    pfd[3] = to_u8_net((fd / 16777216) % 256);
+    pfd[4] = to_u8_net(1);   // POLLIN
+    pfd[5] = to_u8_net(0);
+
+    // Build timespec for ppoll
+    let sec: i32 = timeout_ms / 1000;
+    let nsec: i32 = (timeout_ms % 1000) * 1000000;
+    let ts: str = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+    ts[0] = to_u8_net(sec % 256);
+    ts[1] = to_u8_net((sec / 256) % 256);
+    ts[2] = to_u8_net((sec / 65536) % 256);
+    ts[3] = to_u8_net((sec / 16777216) % 256);
+    ts[8] = to_u8_net(nsec % 256);
+    ts[9] = to_u8_net((nsec / 256) % 256);
+    ts[10] = to_u8_net((nsec / 65536) % 256);
+    ts[11] = to_u8_net((nsec / 16777216) % 256);
+
+    mov(x0, pfd);
+    mov(x1, 1);        // nfds
+    mov(x2, ts);       // timeout
+    mov(x3, 0);        // sigmask = NULL
+    mov(x4, 0);        // sigsetsize = 0
+    mov(x8, 73);       // SYS_ppoll
+    syscall();
+    let ret: i32 = u64_to_i32(getreg(x0));
+    if (ret <= 0) { return ret; }
+
+    let revents: i32 = (pfd[6] & 255) + ((pfd[7] & 255) * 256);
+    if ((revents & 1) == 0) { return -1; }
+    return ret;
+}
+
+fn net_bytes_available(fd: i32) -> i32 {
+    let count_buf: str = "\0\0\0\0";
+    let count_ptr: u64 = ptr(count_buf);
+    mov(x0, fd);
+    mov(x1, 0x541B);   // FIONREAD on Linux
+    mov(x2, count_ptr);
+    mov(x8, 29);       // SYS_ioctl
+    syscall();
+
+    let b0: i32 = count_buf[0] & 255;
+    let b1: i32 = count_buf[1] & 255;
+    let b2: i32 = count_buf[2] & 255;
+    let b3: i32 = count_buf[3] & 255;
+    return b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216);
+}
+
+// ---------------------------------------------------------------------------
+// Signal handling
+// ARM64 Linux rt_sigaction layout is the same as x86_64:
+// sa_handler (8 bytes) + sa_flags (8 bytes) + sa_restorer (8 bytes) + sa_mask (128 bytes)
+// ---------------------------------------------------------------------------
+
+fn net_ignore_sigpipe() -> void {
+    let sa: str = net_make_buf(152);
+    // SIG_IGN = 1
+    sa[0] = 1;
+    // sa_flags at offset 8: 0
+    mov(x0, 13);       // SIGPIPE
+    mov(x1, sa);       // new action
+    mov(x2, 0);        // old_act = NULL
+    mov(x3, 8);        // sigsetsize
+    mov(x8, 134);      // SYS_rt_sigaction
+    syscall();
+}
+
+// ---------------------------------------------------------------------------
+// High-level server helpers
+// ---------------------------------------------------------------------------
+
+fn net_listen_on(port: i32, backlog: i32) -> i32 {
+    let fd: i32 = net_socket();
+    if (fd < 0) { return -1; }
+    net_set_reuse(fd);
+    net_ignore_sigpipe();
+    let rc: i32 = net_bind(fd, port);
+    if (rc != 0) {
+        net_close(fd);
+        return -1;
+    }
+    rc = net_listen(fd, backlog);
+    if (rc != 0) {
+        net_close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+// Read a line from a socket (up to newline or max_len)
+fn net_read_line(fd: i32, max_len: i32) -> str {
+    let buf: str = "\0";
+    let out: str = "";
+    let pos: i32 = 0;
+    while (pos < max_len) {
+        mov(x0, fd);
+        mov(x1, buf);
+        mov(x2, 1);
+        mov(x8, 63);       // SYS_read
+        syscall();
+        let nread: i32 = u64_to_i32(getreg(x0));
+        if (nread <= 0) { break; }
+        if (buf[0] == '\n') { break; }
+        if (buf[0] == '\r') {
+            // skip carriage return
+        } else {
+            out = out + buf[0];
+        }
+        pos = pos + 1;
+    }
+    return out;
+}
+
+// Read all available data from a socket into a string
+fn net_read_all(fd: i32, max_len: i32) -> str {
+    let buf: str = net_make_buf(max_len);
+    let total: i32 = 0;
+    let result: str = "";
+    while (total < max_len) {
+        let avail: i32 = net_poll_read(fd, 100);
+        if (avail <= 0) { break; }
+        let remaining: i32 = max_len - total;
+        mov(x0, fd);
+        mov(x1, buf);
+        mov(x2, remaining);
+        mov(x8, 63);       // SYS_read
+        syscall();
+        let nr: i32 = u64_to_i32(getreg(x0));
+        if (nr <= 0) { break; }
+        let i: i32 = 0;
+        while (i < nr) {
+            result = result + buf[i];
+            i = i + 1;
+        }
+        total = total + nr;
+    }
+    return result;
+}
