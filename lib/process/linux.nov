@@ -1,0 +1,12 @@
+// ---------------------------------------------------------------------------
+// process/linux - Linux platform dispatcher
+// ---------------------------------------------------------------------------
+
+module process_linux;
+
+#if(arch == "amd64") {
+    import linux_amd64;
+}
+#if(arch == "arm64") {
+    import linux_arm64;
+}

@@ -1,0 +1,124 @@
+// ---------------------------------------------------------------------------
+// time/linux_arm64 - time utilities for Linux ARM64 (aarch64)
+// Uses nanosleep (syscall 101) instead of poll for sleep
+// ---------------------------------------------------------------------------
+
+module time_linux_arm64;
+
+import ../std;
+
+// ---------------------------------------------------------------------------
+// Helper: build a timespec struct for nanosleep
+// ---------------------------------------------------------------------------
+
+fn to_u8_time(v: i32) -> i32 {
+    return ((v % 256) + 256) % 256;
+}
+
+// ---------------------------------------------------------------------------
+// Sleep for a given number of milliseconds using nanosleep
+// ---------------------------------------------------------------------------
+
+fn sleep_ms(ms: i32) -> void {
+    let sec: i32 = ms / 1000;
+    let nsec: i32 = (ms % 1000) * 1000000;
+    let ts: str = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+    ts[0] = to_u8_time(sec % 256);
+    ts[1] = to_u8_time((sec / 256) % 256);
+    ts[2] = to_u8_time((sec / 65536) % 256);
+    ts[3] = to_u8_time((sec / 16777216) % 256);
+    ts[8] = to_u8_time(nsec % 256);
+    ts[9] = to_u8_time((nsec / 256) % 256);
+    ts[10] = to_u8_time((nsec / 65536) % 256);
+    ts[11] = to_u8_time((nsec / 16777216) % 256);
+    mov(x0, ts);
+    mov(x1, 0);        // rem = NULL
+    mov(x8, 101);      // SYS_nanosleep
+    syscall();
+}
+
+// ---------------------------------------------------------------------------
+// Sleep for a given number of seconds
+// ---------------------------------------------------------------------------
+
+fn sleep_s(seconds: i32) -> void {
+    sleep_ms(seconds * 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Get current time in milliseconds (wraps get_time_ns)
+// ---------------------------------------------------------------------------
+
+fn get_time_ms() -> i64 {
+    let ns: i64 = get_time_ns();
+    return ns / 1000000;
+}
+
+// ---------------------------------------------------------------------------
+// Get current time in microseconds
+// ---------------------------------------------------------------------------
+
+fn get_time_us() -> i64 {
+    let ns: i64 = get_time_ns();
+    return ns / 1000;
+}
+
+// ---------------------------------------------------------------------------
+// Get current time in seconds
+// ---------------------------------------------------------------------------
+
+fn get_time_s() -> i64 {
+    let ns: i64 = get_time_ns();
+    return ns / 1000000000;
+}
+
+// ---------------------------------------------------------------------------
+// Measure elapsed time in milliseconds between two timestamps
+// ---------------------------------------------------------------------------
+
+fn elapsed_ms(start_ns: i64, end_ns: i64) -> i64 {
+    return (end_ns - start_ns) / 1000000;
+}
+
+fn elapsed_us(start_ns: i64, end_ns: i64) -> i64 {
+    return (end_ns - start_ns) / 1000;
+}
+
+// ---------------------------------------------------------------------------
+// Timer: get a start timestamp, then measure elapsed time
+// ---------------------------------------------------------------------------
+
+fn timer_start() -> i64 {
+    return get_time_ns();
+}
+
+fn timer_elapsed_ms(start: i64) -> i64 {
+    let now: i64 = get_time_ns();
+    return (now - start) / 1000000;
+}
+
+fn timer_elapsed_us(start: i64) -> i64 {
+    let now: i64 = get_time_ns();
+    return (now - start) / 1000;
+}
+
+fn timer_elapsed_s(start: i64) -> i64 {
+    let now: i64 = get_time_ns();
+    return (now - start) / 1000000000;
+}
+
+// ---------------------------------------------------------------------------
+// Format milliseconds as human-readable string (e.g. "1.234s", "500ms")
+// ---------------------------------------------------------------------------
+
+fn format_duration_ms(ms: i64) -> str {
+    if (ms < 1000) {
+        return int_to_str(ms) + "ms";
+    }
+    let secs: i64 = ms / 1000;
+    let remainder: i64 = ms % 1000;
+    if (remainder == 0) {
+        return int_to_str(secs) + "s";
+    }
+    return int_to_str(secs) + "." + int_to_str(remainder) + "s";
+}
