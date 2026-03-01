@@ -63,8 +63,8 @@ fn get_conf_name() -> str {
     fn is_windows() -> bool { return true; }
 }
 #if(os == "linux") {
-    fn get_git_path() -> str { return "git"; }
-    fn get_curl_path() -> str { return "curl"; }
+    fn get_git_path() -> str { return "/usr/bin/git"; }
+    fn get_curl_path() -> str { return "/usr/bin/curl"; }
     fn get_tmp_prefix() -> str { return "/tmp/"; }
     fn get_sh_path() -> str { return "/bin/sh"; }
     fn get_sh_flag() -> str { return "-c"; }
