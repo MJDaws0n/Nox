@@ -1,0 +1,29 @@
+module sha1_verify;
+import lib/MySQL-Interact;
+
+fn main(argc: i32, argv: u64) -> i32 {
+    // SHA1("abc") should be a9993e364706816aba3e25717850c26c9cd0d89d
+    let hash: str = sha1_hash("abc", 3);
+    let hex: str = sha1_to_hex(hash);
+    print("SHA1(abc)    = " + hex);
+    print("Expected     = a9993e364706816aba3e25717850c26c9cd0d89d");
+    
+    // SHA1("") should be da39a3ee5e6b4b0d3255bfef95601890afd80709
+    let hash2: str = sha1_hash("", 0);
+    let hex2: str = sha1_to_hex(hash2);
+    print("SHA1('')     = " + hex2);
+    print("Expected     = da39a3ee5e6b4b0d3255bfef95601890afd80709");
+    
+    // SHA1("password") should be 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8
+    let hash3: str = sha1_hash("password", 8);
+    let hex3: str = sha1_to_hex(hash3);
+    print("SHA1(passwd) = " + hex3);
+    print("Expected     = 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8");
+    
+    // Test escaping
+    print("escape test: " + mysql_escape("hello' OR 1=1; DROP TABLE users; --"));
+    print("quote test:  " + mysql_quote("Robert'); DROP TABLE Students;--"));
+    print("esc_id test: " + mysql_escape_id("my`table"));
+    
+    return 0;
+}

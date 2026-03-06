@@ -1,0 +1,9 @@
+module mysql_compile_test;
+import lib/MySQL-Interact;
+
+fn main(argc: i32, argv: u64) -> i32 {
+    // Just test that it compiles
+    let escaped: str = mysql_escape("hello'world");
+    print(escaped);
+    return 0;
+}

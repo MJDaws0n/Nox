@@ -1,0 +1,161 @@
+// Auto-generated test file. Run on the target platform or in VM/Docker.
+
+module file_io_tests_darwin_arm64;
+
+import main;
+
+fn test_pass(name: str) -> void {
+    print_raw("  [PASS] " + name + "\n");
+}
+
+fn test_fail(name: str, detail: str) -> void {
+    print_raw("  [FAIL] " + name + ": " + detail + "\n");
+}
+
+fn assert_eq_i32(name: str, got: i32, expected: i32) -> i32 {
+    if (got == expected) { test_pass(name); return 0; }
+    test_fail(name, "got " + i32_to_str(got) + ", expected " + i32_to_str(expected));
+    return 1;
+}
+
+fn assert_eq_i64(name: str, got: i64, expected: i64) -> i32 {
+    if (got == expected) { test_pass(name); return 0; }
+    test_fail(name, "got " + i64_to_str(got) + ", expected " + i64_to_str(expected));
+    return 1;
+}
+
+fn assert_eq_str(name: str, got: str, expected: str) -> i32 {
+    if (str_equals(got, expected)) { test_pass(name); return 0; }
+    test_fail(name, "got '" + got + "', expected '" + expected + "'");
+    return 1;
+}
+
+fn assert_true(name: str, val: bool) -> i32 {
+    if (val) { test_pass(name); return 0; }
+    test_fail(name, "expected true");
+    return 1;
+}
+
+fn assert_gt_i32(name: str, val: i32, threshold: i32) -> i32 {
+    if (val > threshold) { test_pass(name); return 0; }
+    test_fail(name, "expected > " + i32_to_str(threshold));
+    return 1;
+}
+
+fn assert_gt_i64(name: str, val: i64, threshold: i64) -> i32 {
+    if (val > threshold) { test_pass(name); return 0; }
+    test_fail(name, "expected > " + i64_to_str(threshold));
+    return 1;
+}
+
+fn assert_gte_i32(name: str, val: i32, threshold: i32) -> i32 {
+    if (val >= threshold) { test_pass(name); return 0; }
+    test_fail(name, "expected >= " + i32_to_str(threshold) + ", got " + i32_to_str(val));
+    return 1;
+}
+
+fn assert_neq_u64(name: str, val: u64, not_val: u64) -> i32 {
+    if (val != not_val) { test_pass(name); return 0; }
+    test_fail(name, "expected != given value");
+    return 1;
+}
+
+fn main(argc: i32, argv: u64) -> i32 {
+    let fails: i32 = 0;
+    print_raw("=== file_io tests (darwin_arm64) ===\n");
+
+    let test_file: str = "/tmp/novus_fio_test.txt";
+    let test_dir: str = "/tmp/novus_fio_testdir";
+
+    // ── write_file / read_file (assembly: open/write/read/close syscalls) ──
+    print_raw("\n--- Read / Write ---\n");
+    let content: str = "Hello, Novus file_io!";
+    let wr: i32 = write_file(test_file, content);
+    fails = fails + assert_eq_i32("write_file", wr, 0);
+
+    let rd: str = read_file(test_file);
+    fails = fails + assert_eq_str("read_file", rd, content);
+
+    // ── file_exists (assembly: syscall access) ──
+    print_raw("\n--- Exists ---\n");
+    fails = fails + assert_true("file_exists (present)", file_exists(test_file));
+    fails = fails + assert_true("file_exists (absent)", !file_exists("/tmp/novus_nonexistent_xyz"));
+
+    // ── file_append (assembly: open with O_APPEND) ──
+    print_raw("\n--- Append ---\n");
+    file_append(test_file, " extra");
+    let rd2: str = read_file(test_file);
+    fails = fails + assert_eq_str("file_append", rd2, "Hello, Novus file_io! extra");
+
+    // ── Low-level open/seek/size/close (assembly: syscalls) ──
+    print_raw("\n--- Low-level ---\n");
+    let fd: i32 = file_open_read(test_file);
+    fails = fails + assert_true("file_open_read >= 0", fd >= 0);
+    if (fd >= 0) {
+        let sz: u64 = file_size(fd);
+        fails = fails + assert_true("file_size > 0", sz > 0);
+        let sk: i64 = file_seek(fd, 0, 0);
+        fails = fails + assert_eq_i64("file_seek to 0", sk, 0);
+        file_close(fd);
+        print_raw("  [PASS] file_close\n");
+    }
+
+    // ── file_rename (assembly: syscall rename) ──
+    print_raw("\n--- Rename ---\n");
+    let rename_dst: str = "/tmp/novus_fio_test_renamed.txt";
+    let rr: i32 = file_rename(test_file, rename_dst);
+    fails = fails + assert_eq_i32("file_rename", rr, 0);
+    fails = fails + assert_true("rename: old gone", !file_exists(test_file));
+    fails = fails + assert_true("rename: new exists", file_exists(rename_dst));
+    file_rename(rename_dst, test_file);
+
+    // ── file_delete (assembly: syscall unlink) ──
+    print_raw("\n--- Delete ---\n");
+    let del: i32 = file_delete(test_file);
+    fails = fails + assert_eq_i32("file_delete", del, 0);
+    fails = fails + assert_true("deleted gone", !file_exists(test_file));
+
+    // ── sys_mkdir (assembly: syscall mkdir) ──
+    print_raw("\n--- Mkdir ---\n");
+    let mr: i32 = sys_mkdir(test_dir, 493);
+    fails = fails + assert_eq_i32("sys_mkdir", mr, 0);
+    fails = fails + assert_true("dir_exists", dir_exists(test_dir));
+    // cleanup: write a file, delete it, then rmdir via shell
+    file_delete(test_dir);
+
+    // ── pipe_create (assembly: syscall pipe) ──
+    print_raw("\n--- Pipe ---\n");
+    let pfd: []i32 = [0, 0];
+    pipe_create(pfd);
+    fails = fails + assert_true("pipe rfd >= 0", pfd[0] >= 0);
+    fails = fails + assert_true("pipe wfd >= 0", pfd[1] >= 0);
+    if (pfd[0] >= 0) {
+        file_write_str(pfd[1], "pipe_test");
+        file_close(pfd[1]);
+        let pbuf: str = make_buffer(16);
+        let pn: i32 = file_read(pfd[0], ptr(pbuf), 16);
+        fails = fails + assert_eq_i32("pipe read len", pn, 9);
+        file_close(pfd[0]);
+    }
+
+    // ── Path manipulation (cross-platform, suggested) ──
+    print_raw("\n--- Paths ---\n");
+    fails = fails + assert_eq_str("path_ext", path_ext("file.txt"), ".txt");
+    fails = fails + assert_eq_str("path_ext none", path_ext("noext"), "");
+    fails = fails + assert_eq_str("path_stem", path_stem("file.txt"), "file");
+    fails = fails + assert_eq_str("path_dir", path_dir("/usr/bin/ls"), "/usr/bin");
+    fails = fails + assert_eq_str("path_dir dot", path_dir("file.txt"), ".");
+    fails = fails + assert_eq_str("path_basename", path_basename("/usr/bin/ls"), "ls");
+    fails = fails + assert_eq_str("path_join", path_join("/usr", "bin"), "/usr/bin");
+    fails = fails + assert_eq_str("path_join trail", path_join("/usr/", "bin"), "/usr/bin");
+    fails = fails + assert_eq_str("path_ext_no_dot", path_ext_no_dot("x.json"), "json");
+
+    // ── Summary ──
+    print_raw("\n");
+    if (fails > 0) {
+        print_raw(i32_to_str(fails) + " test(s) FAILED\n");
+        return 1;
+    }
+    print_raw("All tests PASSED\n");
+    return 0;
+}
