@@ -1,0 +1,70 @@
+FROM --platform=$TARGETPLATFORM debian:bookworm-slim AS build
+
+ARG TARGETARCH
+ENV ARCH=${TARGETARCH}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl binutils && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY lib/ lib/
+COPY main.nov .
+
+# Download novus compiler for target architecture
+RUN curl -fsSL "https://github.com/MJDaws0n/Novus/releases/download/V0.1.2/novus-linux-${TARGETARCH}" -o /usr/local/bin/novus \
+    && chmod +x /usr/local/bin/novus
+
+# Compile all test files for this platform
+RUN set -e; \
+    PLAT="linux_${ARCH}"; \
+    echo "=== Compiling tests for ${PLAT} ==="; \
+    for f in lib/*/tests_${PLAT}.nov; do \
+        [ -f "$f" ] || continue; \
+        echo "Compiling $f ..."; \
+        novus "$f" 2>&1; \
+    done; \
+    # Cross-platform tests (maths)
+    if [ -f lib/maths/tests.nov ]; then \
+        echo "Compiling lib/maths/tests.nov ..."; \
+        novus lib/maths/tests.nov 2>&1; \
+    fi; \
+    echo "=== All compilations done ==="
+
+# Run all test binaries
+CMD set -e; \
+    if [ "${ARCH}" = "amd64" ]; then BDIR="linux_x86_64"; else BDIR="linux_arm64"; fi; \
+    PLAT="linux_${ARCH}"; \
+    FAILS=0; PASS=0; \
+    echo ""; \
+    echo "========================================"; \
+    echo "  Running tests on ${PLAT}"; \
+    echo "========================================"; \
+    echo ""; \
+    for bin in build/${BDIR}/*_tests_${PLAT}; do \
+        [ -x "$bin" ] || continue; \
+        NAME=$(basename "$bin"); \
+        echo ">>> ${NAME}"; \
+        if ./"$bin"; then \
+            PASS=$((PASS+1)); \
+        else \
+            FAILS=$((FAILS+1)); \
+            echo "  ^^^ FAILED ^^^"; \
+        fi; \
+        echo ""; \
+    done; \
+    # Cross-platform maths test
+    if [ -x "build/${BDIR}/maths_tests" ]; then \
+        echo ">>> maths_tests"; \
+        if ./build/${BDIR}/maths_tests; then \
+            PASS=$((PASS+1)); \
+        else \
+            FAILS=$((FAILS+1)); \
+            echo "  ^^^ FAILED ^^^"; \
+        fi; \
+        echo ""; \
+    fi; \
+    echo "========================================"; \
+    echo "  Results: ${PASS} passed, ${FAILS} failed"; \
+    echo "========================================"; \
+    if [ "$FAILS" -gt 0 ]; then exit 1; fi

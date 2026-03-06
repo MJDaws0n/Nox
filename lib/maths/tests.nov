@@ -1,0 +1,179 @@
+// Auto-generated test file. Run on the target platform or in VM/Docker.
+
+module maths_tests;
+
+import main;
+import ../std;
+
+fn test_pass(name: str) -> void {
+    print_raw("  [PASS] " + name + "\n");
+}
+
+fn test_fail(name: str, detail: str) -> void {
+    print_raw("  [FAIL] " + name + ": " + detail + "\n");
+}
+
+fn assert_eq_i32(name: str, got: i32, expected: i32) -> i32 {
+    if (got == expected) { test_pass(name); return 0; }
+    test_fail(name, "got " + i32_to_str(got) + ", expected " + i32_to_str(expected));
+    return 1;
+}
+
+fn assert_eq_i64(name: str, got: i64, expected: i64) -> i32 {
+    if (got == expected) { test_pass(name); return 0; }
+    test_fail(name, "got " + i64_to_str(got) + ", expected " + i64_to_str(expected));
+    return 1;
+}
+
+fn assert_eq_str(name: str, got: str, expected: str) -> i32 {
+    if (str_equals(got, expected)) { test_pass(name); return 0; }
+    test_fail(name, "got '" + got + "', expected '" + expected + "'");
+    return 1;
+}
+
+fn assert_true(name: str, val: bool) -> i32 {
+    if (val) { test_pass(name); return 0; }
+    test_fail(name, "expected true");
+    return 1;
+}
+
+fn assert_gt_i32(name: str, val: i32, threshold: i32) -> i32 {
+    if (val > threshold) { test_pass(name); return 0; }
+    test_fail(name, "expected > " + i32_to_str(threshold));
+    return 1;
+}
+
+fn assert_gt_i64(name: str, val: i64, threshold: i64) -> i32 {
+    if (val > threshold) { test_pass(name); return 0; }
+    test_fail(name, "expected > " + i64_to_str(threshold));
+    return 1;
+}
+
+fn assert_gte_i32(name: str, val: i32, threshold: i32) -> i32 {
+    if (val >= threshold) { test_pass(name); return 0; }
+    test_fail(name, "expected >= " + i32_to_str(threshold) + ", got " + i32_to_str(val));
+    return 1;
+}
+
+fn assert_neq_u64(name: str, val: u64, not_val: u64) -> i32 {
+    if (val != not_val) { test_pass(name); return 0; }
+    test_fail(name, "expected != given value");
+    return 1;
+}
+
+fn main(argc: i32, argv: u64) -> i32 {
+    let fails: i32 = 0;
+    print_raw("=== maths tests (cross-platform) ===\n");
+
+    // ── Parity ──
+    print_raw("\n--- Parity ---\n");
+    fails = fails + assert_true("is_even(4)", is_even(4));
+    fails = fails + assert_true("!is_even(3)", !is_even(3));
+    fails = fails + assert_true("is_even(0)", is_even(0));
+    fails = fails + assert_true("is_odd(3)", is_odd(3));
+    fails = fails + assert_true("!is_odd(4)", !is_odd(4));
+
+    // ── Primality ──
+    print_raw("\n--- Primality ---\n");
+    fails = fails + assert_true("is_prime(2)", is_prime(2));
+    fails = fails + assert_true("is_prime(7)", is_prime(7));
+    fails = fails + assert_true("is_prime(13)", is_prime(13));
+    fails = fails + assert_true("!is_prime(1)", !is_prime(1));
+    fails = fails + assert_true("!is_prime(4)", !is_prime(4));
+    fails = fails + assert_true("!is_prime(9)", !is_prime(9));
+
+    // ── Absolute value ──
+    print_raw("\n--- Abs ---\n");
+    fails = fails + assert_eq_i32("abs(5)", abs(5), 5);
+    fails = fails + assert_eq_i32("abs(-5)", abs(-5), 5);
+    fails = fails + assert_eq_i32("abs(0)", abs(0), 0);
+
+    // ── Min / Max / Clamp ──
+    print_raw("\n--- Min/Max/Clamp ---\n");
+    fails = fails + assert_eq_i32("max(3,7)", max(3, 7), 7);
+    fails = fails + assert_eq_i32("max(7,3)", max(7, 3), 7);
+    fails = fails + assert_eq_i32("min(3,7)", min(3, 7), 3);
+    fails = fails + assert_eq_i32("clamp(5,1,10)", clamp(5, 1, 10), 5);
+    fails = fails + assert_eq_i32("clamp(-1,0,10)", clamp(-1, 0, 10), 0);
+    fails = fails + assert_eq_i32("clamp(20,0,10)", clamp(20, 0, 10), 10);
+
+    // ── Sign ──
+    print_raw("\n--- Sign ---\n");
+    fails = fails + assert_eq_i32("sign(5)", sign(5), 1);
+    fails = fails + assert_eq_i32("sign(-3)", sign(-3), -1);
+    fails = fails + assert_eq_i32("sign(0)", sign(0), 0);
+
+    // ── Power ──
+    print_raw("\n--- Power ---\n");
+    fails = fails + assert_eq_i32("pow_i32(2,10)", pow_i32(2, 10), 1024);
+    fails = fails + assert_eq_i32("pow_i32(3,0)", pow_i32(3, 0), 1);
+    fails = fails + assert_eq_i32("pow_i32(5,1)", pow_i32(5, 1), 5);
+    fails = fails + assert_eq_i32("pow_i32(2,0)", pow_i32(2, 0), 1);
+
+    // ── Factorial ──
+    print_raw("\n--- Factorial ---\n");
+    fails = fails + assert_eq_i64("factorial(0)", factorial(0), 1);
+    fails = fails + assert_eq_i64("factorial(1)", factorial(1), 1);
+    fails = fails + assert_eq_i64("factorial(5)", factorial(5), 120);
+    fails = fails + assert_eq_i64("factorial(10)", factorial(10), 3628800);
+
+    // ── GCD / LCM ──
+    print_raw("\n--- GCD / LCM ---\n");
+    fails = fails + assert_eq_i32("gcd(12,8)", gcd(12, 8), 4);
+    fails = fails + assert_eq_i32("gcd(7,13)", gcd(7, 13), 1);
+    fails = fails + assert_eq_i32("gcd(0,5)", gcd(0, 5), 5);
+    fails = fails + assert_eq_i32("lcm(4,6)", lcm(4, 6), 12);
+    fails = fails + assert_eq_i32("lcm(3,5)", lcm(3, 5), 15);
+
+    // ── div_ceil ──
+    print_raw("\n--- div_ceil ---\n");
+    fails = fails + assert_eq_i32("div_ceil(7,2)", div_ceil(7, 2), 4);
+    fails = fails + assert_eq_i32("div_ceil(6,3)", div_ceil(6, 3), 2);
+
+    // ── wrap ──
+    print_raw("\n--- wrap ---\n");
+    fails = fails + assert_eq_i32("wrap(5,3)", wrap(5, 3), 2);
+    fails = fails + assert_eq_i32("wrap(3,3)", wrap(3, 3), 0);
+
+    // ── isqrt ──
+    print_raw("\n--- isqrt ---\n");
+    fails = fails + assert_eq_i32("isqrt(0)", isqrt(0), 0);
+    fails = fails + assert_eq_i32("isqrt(1)", isqrt(1), 1);
+    fails = fails + assert_eq_i32("isqrt(4)", isqrt(4), 2);
+    fails = fails + assert_eq_i32("isqrt(9)", isqrt(9), 3);
+    fails = fails + assert_eq_i32("isqrt(10)", isqrt(10), 3);
+    fails = fails + assert_eq_i32("isqrt(100)", isqrt(100), 10);
+
+    // ── Fibonacci ──
+    print_raw("\n--- Fibonacci ---\n");
+    fails = fails + assert_eq_i64("fib(0)", fibonacci(0), 0);
+    fails = fails + assert_eq_i64("fib(1)", fibonacci(1), 1);
+    fails = fails + assert_eq_i64("fib(10)", fibonacci(10), 55);
+    fails = fails + assert_eq_i64("fib(20)", fibonacci(20), 6765);
+
+    // ── digit_sum / digit_count ──
+    print_raw("\n--- Digits ---\n");
+    fails = fails + assert_eq_i32("digit_sum(123)", digit_sum(123), 6);
+    fails = fails + assert_eq_i32("digit_sum(0)", digit_sum(0), 0);
+    fails = fails + assert_eq_i32("digit_count(123)", digit_count(123), 3);
+    fails = fails + assert_eq_i32("digit_count(0)", digit_count(0), 1);
+
+    // ── lerp ──
+    print_raw("\n--- lerp ---\n");
+    fails = fails + assert_eq_i32("lerp(0,100,50)", lerp(0, 100, 50), 50);
+    fails = fails + assert_eq_i32("lerp(0,100,0)", lerp(0, 100, 0), 0);
+    fails = fails + assert_eq_i32("lerp(0,100,100)", lerp(0, 100, 100), 100);
+
+    // ── map_range ──
+    print_raw("\n--- map_range ---\n");
+    fails = fails + assert_eq_i32("map_range(5,0,10,0,100)", map_range(5, 0, 10, 0, 100), 50);
+
+    // ── Summary ──
+    print_raw("\n");
+    if (fails > 0) {
+        print_raw(i32_to_str(fails) + " test(s) FAILED\n");
+        return 1;
+    }
+    print_raw("All tests PASSED\n");
+    return 0;
+}

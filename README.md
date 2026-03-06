@@ -144,6 +144,59 @@ your-package@1.0.0=https://github.com/your-username/your-repo|main|<commit>
 - Git (installed via Xcode Command Line Tools)
 - Internet connection (for pulling packages and fetching registry)
 
+## Testing Requirements for Official Libraries
+
+All official Nox libraries **must** include test files for every supported operating system and CPU architecture. Tests live inside each library directory using the naming convention:
+
+```
+lib/<library>/tests_<os>_<arch>.nov
+```
+
+For example:
+```
+lib/std/
+├── tests_darwin_arm64.nov
+├── tests_linux_amd64.nov
+├── tests_linux_arm64.nov
+├── tests_windows_amd64.nov
+└── tests_windows_x86.nov
+```
+
+### What must be tested
+
+- **Every custom function that uses inline assembly instructions** (e.g. `mov`, `syscall`, `getreg`, `win_call`) **must** have at least one test covering it.
+- Testing pure Novus functions (no assembly) is **strongly recommended** but not required.
+
+### How to run tests
+
+Each test file is a standalone Novus program with a `main()` entry point. Compile and run it on the target platform:
+
+```bash
+novus lib/std/tests_darwin_arm64.nov
+./build/darwin_arm64/std_tests_darwin_arm64
+```
+
+**Tests do not have to be run natively.** You can use:
+- **Virtual machines** (e.g. UTM, QEMU, VirtualBox) for other operating systems
+- **Docker containers** for Linux architectures (`docker buildx --platform linux/amd64` or `linux/arm64`)
+- **CPU emulation** (e.g. QEMU user-mode) for cross-architecture testing
+
+### Test file structure
+
+Test files should print `[PASS]` or `[FAIL]` for each test case and exit with code `0` on success or `1` on failure:
+
+```novus
+module my_lib_tests_darwin_arm64;
+import main;
+
+fn main(argc: i32, argv: u64) -> i32 {
+    let fails: i32 = 0;
+    // ... test assertions ...
+    if (fails > 0) { return 1; }
+    return 0;
+}
+```
+
 ## Built With
 
 Nox is written entirely in [Novus](https://github.com/MJDaws0n/Novus), the language it serves. It uses a folder-based library structure with cross-platform core modules and platform-specific implementations, and shells out to `git` for cloning and `curl` for fetching the registry.

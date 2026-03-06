@@ -1,0 +1,47 @@
+module mysql_debug;
+import lib/MySQL-Interact;
+
+fn byte_to_char(b: i32) -> str {
+    let c: str = "x";
+    c[0] = b;
+    return c;
+}
+
+fn main(argc: i32, argv: u64) -> i32 {
+    net_ignore_sigpipe();
+    let fd: i32 = net_socket();
+    print("socket fd = " + i32_to_str(fd));
+    
+    let rc: i32 = net_connect(fd, 127, 0, 0, 1, 3307);
+    print("connect rc = " + i32_to_str(rc));
+    
+    if (rc < 0) {
+        print("connect failed");
+        return 1;
+    }
+    
+    let greeting: str = mysql_read_packet(fd);
+    let glen: i32 = len(greeting);
+    print("greeting len = " + i32_to_str(glen));
+    
+    if (glen < 1) {
+        print("no greeting");
+        net_close(fd);
+        return 1;
+    }
+    
+    let proto: i32 = byte_at(greeting, 0);
+    print("protocol = " + i32_to_str(proto));
+    
+    let sv: str = "";
+    let i: i32 = 1;
+    while (byte_at(greeting, i) != 0 && i < glen) {
+        sv = sv + byte_to_char(byte_at(greeting, i));
+        i = i + 1;
+    }
+    print("server version = " + sv);
+    print("scramble bytes 0-3: " + i32_to_str(byte_at(greeting, i+1+4)) + "," + i32_to_str(byte_at(greeting, i+1+5)) + "," + i32_to_str(byte_at(greeting, i+1+6)) + "," + i32_to_str(byte_at(greeting, i+1+7)));
+    
+    net_close(fd);
+    return 0;
+}
