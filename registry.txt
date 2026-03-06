@@ -6,48 +6,56 @@
 #
 # To add a package, submit a PR to https://github.com/MJDaws0n/Nox
 # or open an issue with the package details.
+# All packages submitted MUST contain tests for every function
+# using custom assembly instructions. Functions not using custom
+# assembly instructions should also have test, but it's not required.
 
 # Env
 env=https://github.com/MJDaws0n/novus-env
-env:latest=1.0.1
-env@1.0.0=https://github.com/MJDaws0n/novus-env|main|
+env:latest=1.0.2
+env@1.0.2=https://github.com/MJDaws0n/novus-env|main|
 
 # File_io
 file_io=https://github.com/MJDaws0n/novus-file_io
-file_io:latest=1.0.1
-file_io@1.0.0=https://github.com/MJDaws0n/novus-file_io|main|
+file_io:latest=1.0.2
+file_io@1.0.2=https://github.com/MJDaws0n/novus-file_io|main|
 
 # Maths
 maths=https://github.com/MJDaws0n/novus-maths
-maths:latest=1.0.0
-maths@1.0.0=https://github.com/MJDaws0n/novus-maths|main|
+maths:latest=1.0.1
+maths@1.0.1=https://github.com/MJDaws0n/novus-maths|main|
 
 # Net
 net=https://github.com/MJDaws0n/novus-net
-net:latest=1.0.1
-net@1.0.0=https://github.com/MJDaws0n/novus-net|main|
+net:latest=1.0.2
+net@1.0.2=https://github.com/MJDaws0n/novus-net|main|
 
 # Process
 process=https://github.com/MJDaws0n/novus-process
-process:latest=1.0.2
-process@1.0.0=https://github.com/MJDaws0n/novus-process|main|
+process:latest=1.0.3
+process@1.0.3=https://github.com/MJDaws0n/novus-process|main|
 
 # STD
 std=https://github.com/MJDaws0n/novus-std
-std:latest=1.1.1
-std@1.0.0=https://github.com/MJDaws0n/novus-std|main|
+std:latest=1.1.2
+std@1.1.2=https://github.com/MJDaws0n/novus-std|main|
 
 # Time
 time=https://github.com/MJDaws0n/novus-time
-time:latest=1.0.1
-time@1.0.0=https://github.com/MJDaws0n/novus-time|main|
+time:latest=1.0.2
+time@1.0.2=https://github.com/MJDaws0n/novus-time|main|
 
 # Window
 window=https://github.com/MJDaws0n/novus-window
-window:latest=1.0.1
-window@1.0.0=https://github.com/MJDaws0n/novus-window|main|
+window:latest=1.0.2
+window@1.0.2=https://github.com/MJDaws0n/novus-window|main|
 
 # HTTP
 http=https://github.com/MJDaws0n/novus-http
-http:latest=1.0.1
-http@1.0.0=https://github.com/MJDaws0n/novus-http|main|
+http:latest=1.0.2
+http@1.0.2=https://github.com/MJDaws0n/novus-http|main|
+
+# MySQL-Interact
+MySQL-Interact=https://github.com/MJDaws0n/novus-MySQL-interact
+MySQL-interact:latest=1.0.0
+MySQL-Interact@1.0.0=https://github.com/MJDaws0n/novus-MySQL-interact|main|
