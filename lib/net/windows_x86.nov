@@ -17,9 +17,12 @@ fn to_u8_net(v: i32) -> i32 {
 }
 
 fn net_make_buf(size: i32) -> str {
-    let buf: str = "";
+    let buf: str = make_buffer(size);
     let i: i32 = 0;
-    while (i < size) { buf = buf + "\0"; i = i + 1; }
+    while (i < size) {
+        store8(ptr(buf) + i32_to_u64(i), 0);
+        i = i + 1;
+    }
     return buf;
 }
 
@@ -27,15 +30,15 @@ fn net_write_i32_le(buf: str, offset: i32, val: i32) -> void {
     let v: i32 = val;
     let i: i32 = 0;
     while (i < 4) {
-        buf[offset + i] = to_u8_net(v % 256);
+        store8(ptr(buf) + i32_to_u64(offset + i), to_u8_net(v % 256));
         v = v / 256;
         i = i + 1;
     }
 }
 
 fn net_write_i16_be(buf: str, offset: i32, val: i32) -> void {
-    buf[offset] = to_u8_net(val / 256);
-    buf[offset + 1] = to_u8_net(val % 256);
+    store8(ptr(buf) + i32_to_u64(offset), to_u8_net(val / 256));
+    store8(ptr(buf) + i32_to_u64(offset + 1), to_u8_net(val % 256));
 }
 
 // ---------------------------------------------------------------------------
@@ -44,9 +47,7 @@ fn net_write_i16_be(buf: str, offset: i32, val: i32) -> void {
 
 fn net_wsa_startup() -> i32 {
     // WSADATA: 400 bytes on x86
-    let wsadata: str = "";
-    let i: i32 = 0;
-    while (i < 400) { wsadata = wsadata + "\0"; i = i + 1; }
+    let wsadata: str = net_make_buf(400);
     win_call("WSAStartup", 514, wsadata);
     let rc: u64 = getreg(eax);
     if (rc != 0) { return -1; }
@@ -62,22 +63,20 @@ fn net_wsa_cleanup() -> void {
 // ---------------------------------------------------------------------------
 
 fn make_sockaddr_in(port: i32) -> str {
-    let buf: str = "";
-    let i: i32 = 0;
-    while (i < 16) { buf = buf + "\0"; i = i + 1; }
-    buf[0] = to_u8_net(2);  // AF_INET
-    buf[1] = 0;
-    buf[2] = to_u8_net(port / 256);
-    buf[3] = to_u8_net(port % 256);
+    let buf: str = net_make_buf(16);
+    store8(ptr(buf), 2);  // AF_INET
+    store8(ptr(buf) + 1, 0);
+    store8(ptr(buf) + 2, to_u8_net(port / 256));
+    store8(ptr(buf) + 3, to_u8_net(port % 256));
     return buf;
 }
 
 fn make_sockaddr_in_addr(a: i32, b: i32, c: i32, d: i32, port: i32) -> str {
     let buf: str = make_sockaddr_in(port);
-    buf[4] = to_u8_net(a);
-    buf[5] = to_u8_net(b);
-    buf[6] = to_u8_net(c);
-    buf[7] = to_u8_net(d);
+    store8(ptr(buf) + 4, to_u8_net(a));
+    store8(ptr(buf) + 5, to_u8_net(b));
+    store8(ptr(buf) + 6, to_u8_net(c));
+    store8(ptr(buf) + 7, to_u8_net(d));
     return buf;
 }
 
