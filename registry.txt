@@ -38,7 +38,7 @@ process@1.0.3=https://github.com/MJDaws0n/novus-process|main|
 
 # STD
 std=https://github.com/MJDaws0n/novus-std
-std:latest=1.1.4
+std:latest=1.1.5
 std@1.1.2=https://github.com/MJDaws0n/novus-std|main|
 
 # Time
