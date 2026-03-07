@@ -1372,7 +1372,6 @@ fn main(argc: i32, argv: u64) -> i32 {
                 target = "https://" + target;
             }
             let pull_result: i32 = pull_package(target, "", shallow, pull_branch, pull_commit, pull_version);
-            if (pull_result == 0) { maybe_check_updates(); }
             return pull_result;
         }
 
@@ -1401,9 +1400,6 @@ fn main(argc: i32, argv: u64) -> i32 {
                 if (len(pull_commit) == 0) { pull_commit = v_commit; }
 
                 let result: i32 = pull_package(v_url, target, shallow, pull_branch, pull_commit, pull_version);
-                if (result == 0) {
-                    check_updates(registry, load_conf());
-                }
                 return result;
             }
 
@@ -1416,9 +1412,6 @@ fn main(argc: i32, argv: u64) -> i32 {
             }
             print("warning: version " + pull_version + " not found in registry, pulling latest");
             let result: i32 = pull_package(base_url, target, shallow, pull_branch, pull_commit, pull_version);
-            if (result == 0) {
-                check_updates(registry, load_conf());
-            }
             return result;
         }
 
@@ -1432,9 +1425,6 @@ fn main(argc: i32, argv: u64) -> i32 {
         }
 
         let result: i32 = pull_package(url, target, shallow, pull_branch, pull_commit, "");
-        if (result == 0) {
-            check_updates(registry, load_conf());
-        }
         return result;
     }
 
@@ -1448,7 +1438,6 @@ fn main(argc: i32, argv: u64) -> i32 {
 
         let target: str = argv_get(argv, 2);
         let result: i32 = remove_package(target);
-        if (result == 0) { maybe_check_updates(); }
         return result;
     }
 
