@@ -27,7 +27,7 @@ maths@1.0.1=https://github.com/MJDaws0n/novus-maths|main|
 
 # Net
 net=https://github.com/MJDaws0n/novus-net
-net:latest=1.0.4
+net:latest=1.0.5
 net@1.0.4=https://github.com/MJDaws0n/novus-net|main|
 net@1.0.3=https://github.com/MJDaws0n/novus-net|main|
 
