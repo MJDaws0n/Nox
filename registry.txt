@@ -60,3 +60,8 @@ http@1.0.2=https://github.com/MJDaws0n/novus-http|main|
 MySQL-Interact=https://github.com/MJDaws0n/novus-MySQL-interact
 MySQL-interact:latest=1.0.0
 MySQL-Interact@1.0.0=https://github.com/MJDaws0n/novus-MySQL-interact|main|
+
+# SMTP
+smtp=https://github.com/MJDaws0n/novus-smtp
+smtp:latest=1.0.0
+smtp@1.0.0=https://github.com/MJDaws0n/novus-smtp|main|
