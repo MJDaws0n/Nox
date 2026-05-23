@@ -55,7 +55,8 @@ time@1.0.2=https://github.com/MJDaws0n/novus-time|main|
 
 # Window
 window=https://github.com/MJDaws0n/novus-window
-window:latest=1.0.7
+window:latest=1.0.8
+window@1.0.8=https://github.com/MJDaws0n/novus-window|main|4f0db2f869bb5e2d8c0b43bc72857d1b4398c9ea
 window@1.0.7=https://github.com/MJDaws0n/novus-window|main|a976862bfb960c7786242ac705bd332b62c9b45b
 window@1.0.6=https://github.com/MJDaws0n/novus-window|main|33d451bff5f7c97a29d314487d34ff31b1d35a4e
 window@1.0.5=https://github.com/MJDaws0n/novus-window|main|79071004762dafa75ec226f8df739bc027bd85e3
