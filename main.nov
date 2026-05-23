@@ -156,18 +156,6 @@ fn save_conf(conf: str) -> void {
     write_file(get_conf_name(), conf);
 }
 
-// build pkg entry lines
-fn conf_build_entry(name: str, url: str, version: str, branch: str, commit: str, min_ver: str, max_ver: str) -> str {
-    let e: str = "";
-    e = e + "pkg:" + name + ":url=" + url + "\n";
-    e = e + "pkg:" + name + ":version=" + version + "\n";
-    e = e + "pkg:" + name + ":branch=" + branch + "\n";
-    e = e + "pkg:" + name + ":commit=" + commit + "\n";
-    e = e + "pkg:" + name + ":min=" + min_ver + "\n";
-    e = e + "pkg:" + name + ":max=" + max_ver + "\n";
-    return e;
-}
-
 // rebuild the entire conf from existing data plus optionally modified installed list
 fn conf_rebuild(conf: str, installed: str) -> str {
     let result: str = "# libraries.conf - Nox package manifest\n";
@@ -178,15 +166,12 @@ fn conf_rebuild(conf: str, installed: str) -> str {
     let i: i32 = 0;
     while (i < n) {
         let pkg: str = csv_get(installed, i);
-        result = result + conf_build_entry(
-            pkg,
-            conf_get(conf, pkg, "url"),
-            conf_get(conf, pkg, "version"),
-            conf_get(conf, pkg, "branch"),
-            conf_get(conf, pkg, "commit"),
-            conf_get(conf, pkg, "min"),
-            conf_get(conf, pkg, "max")
-        );
+        result = result + "pkg:" + pkg + ":url=" + conf_get(conf, pkg, "url") + "\n";
+        result = result + "pkg:" + pkg + ":version=" + conf_get(conf, pkg, "version") + "\n";
+        result = result + "pkg:" + pkg + ":branch=" + conf_get(conf, pkg, "branch") + "\n";
+        result = result + "pkg:" + pkg + ":commit=" + conf_get(conf, pkg, "commit") + "\n";
+        result = result + "pkg:" + pkg + ":min=" + conf_get(conf, pkg, "min") + "\n";
+        result = result + "pkg:" + pkg + ":max=" + conf_get(conf, pkg, "max") + "\n";
         result = result + "\n";
         i = i + 1;
     }
@@ -194,13 +179,21 @@ fn conf_rebuild(conf: str, installed: str) -> str {
 }
 
 fn conf_add_package(conf: str, name: str, url: str, version: str, branch: str, commit: str, min_ver: str, max_ver: str) -> str {
+    if (conf_has_package(conf, name)) {
+        conf = conf_remove_package(conf, name);
+    }
     let installed: str = conf_get_installed(conf);
     if (len(installed) > 0) {
         installed = installed + "," + name;
     } else {
         installed = name;
     }
-    let entry: str = conf_build_entry(name, url, version, branch, commit, min_ver, max_ver);
+    let entry: str = "pkg:" + name + ":url=" + url + "\n";
+    entry = entry + "pkg:" + name + ":version=" + version + "\n";
+    entry = entry + "pkg:" + name + ":branch=" + branch + "\n";
+    entry = entry + "pkg:" + name + ":commit=" + commit + "\n";
+    entry = entry + "pkg:" + name + ":min=" + min_ver + "\n";
+    entry = entry + "pkg:" + name + ":max=" + max_ver + "\n";
     let new_conf: str = conf_rebuild(conf, installed);
     // the rebuild already includes the new entry via the updated installed list
     // but the new entry's data isn't in conf yet, so append it
