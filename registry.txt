@@ -25,6 +25,11 @@ maths=https://github.com/MJDaws0n/novus-maths
 maths:latest=1.0.1
 maths@1.0.1=https://github.com/MJDaws0n/novus-maths|main|
 
+# Physics
+physics=https://github.com/MJDaws0n/novus-physics
+physics:latest=1.0.0
+physics@1.0.0=https://github.com/MJDaws0n/novus-physics|main|
+
 # Net
 net=https://github.com/MJDaws0n/novus-net
 net:latest=1.0.6
