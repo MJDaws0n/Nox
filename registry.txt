@@ -13,7 +13,7 @@
 # Env
 env=https://github.com/MJDaws0n/novus-env
 env:latest=1.0.3
-env@1.0.3=https://github.com/MJDaws0n/novus-env|main|2c957c06f8488d083387a7a8d1d07d2e0028f505
+env@1.0.3=https://github.com/MJDaws0n/novus-env|main|db5f2071f3a8e0ed324708b637dc4ff9897e77f9
 env@1.0.2=https://github.com/MJDaws0n/novus-env|main|
 
 # File_io
@@ -56,7 +56,7 @@ time@1.0.2=https://github.com/MJDaws0n/novus-time|main|
 # Window
 window=https://github.com/MJDaws0n/novus-window
 window:latest=1.0.4
-window@1.0.4=https://github.com/MJDaws0n/novus-window|main|d04361da4ddeed27c579ea0b6ce5c72656274c40
+window@1.0.4=https://github.com/MJDaws0n/novus-window|main|3e8001e5c0a48b794d216b5d27fb562998d03627
 window@1.0.3=https://github.com/MJDaws0n/novus-window|main|ed153a33d509f5a0a0b62364f662e6f2e47302d4
 window@1.0.2=https://github.com/MJDaws0n/novus-window|main|
 
