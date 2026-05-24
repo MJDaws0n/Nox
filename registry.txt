@@ -45,7 +45,7 @@ process@1.0.3=https://github.com/MJDaws0n/novus-process|main|
 # STD
 std=https://github.com/MJDaws0n/novus-std
 std:latest=1.2.1
-std@1.2.1=https://github.com/MJDaws0n/novus-std|main|bf2910c
+std@1.2.1=https://github.com/MJDaws0n/novus-std|main|bf2910ca69a8cb922407d3e87646d6e49745946a
 std@1.2=https://github.com/MJDaws0n/novus-std|main|bf2910ca69a8cb922407d3e87646d6e49745946a
 std@1.1.9=https://github.com/MJDaws0n/novus-std|main|3f36b507f2dc4dfd6b0f9e690c3bef16328887e8
 std@1.1.8=https://github.com/MJDaws0n/novus-std|main|1272b07
