@@ -311,26 +311,38 @@ fn net_shutdown(fd: i32, how: i32) -> i32 {
 // ---------------------------------------------------------------------------
 
 fn net_poll_read(fd: i32, timeout_ms: i32) -> i32 {
-    let pfd: str = "\0\0\0\0\0\0\0\0";
-    pfd[0] = to_u8_net(fd % 256);
-    pfd[1] = to_u8_net((fd / 256) % 256);
-    pfd[2] = to_u8_net((fd / 65536) % 256);
-    pfd[3] = to_u8_net((fd / 16777216) % 256);
-    pfd[4] = to_u8_net(1);   // POLLIN
-    pfd[5] = to_u8_net(0);
+    let pfd: str = make_buffer(8);
+    let pfd_ptr: u64 = ptr(pfd);
+    store8(pfd_ptr, to_u8_net(fd % 256));
+    store8(pfd_ptr + 1, to_u8_net((fd / 256) % 256));
+    store8(pfd_ptr + 2, to_u8_net((fd / 65536) % 256));
+    store8(pfd_ptr + 3, to_u8_net((fd / 16777216) % 256));
+    store8(pfd_ptr + 4, to_u8_net(1));   // POLLIN
+    store8(pfd_ptr + 5, to_u8_net(0));
+    store8(pfd_ptr + 6, 0);
+    store8(pfd_ptr + 7, 0);
 
     // Build timespec for ppoll
     let sec: i32 = timeout_ms / 1000;
     let nsec: i32 = (timeout_ms % 1000) * 1000000;
-    let ts: str = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-    ts[0] = to_u8_net(sec % 256);
-    ts[1] = to_u8_net((sec / 256) % 256);
-    ts[2] = to_u8_net((sec / 65536) % 256);
-    ts[3] = to_u8_net((sec / 16777216) % 256);
-    ts[8] = to_u8_net(nsec % 256);
-    ts[9] = to_u8_net((nsec / 256) % 256);
-    ts[10] = to_u8_net((nsec / 65536) % 256);
-    ts[11] = to_u8_net((nsec / 16777216) % 256);
+    let ts: str = make_buffer(16);
+    let ts_ptr: u64 = ptr(ts);
+    store8(ts_ptr, to_u8_net(sec % 256));
+    store8(ts_ptr + 1, to_u8_net((sec / 256) % 256));
+    store8(ts_ptr + 2, to_u8_net((sec / 65536) % 256));
+    store8(ts_ptr + 3, to_u8_net((sec / 16777216) % 256));
+    store8(ts_ptr + 4, 0);
+    store8(ts_ptr + 5, 0);
+    store8(ts_ptr + 6, 0);
+    store8(ts_ptr + 7, 0);
+    store8(ts_ptr + 8, to_u8_net(nsec % 256));
+    store8(ts_ptr + 9, to_u8_net((nsec / 256) % 256));
+    store8(ts_ptr + 10, to_u8_net((nsec / 65536) % 256));
+    store8(ts_ptr + 11, to_u8_net((nsec / 16777216) % 256));
+    store8(ts_ptr + 12, 0);
+    store8(ts_ptr + 13, 0);
+    store8(ts_ptr + 14, 0);
+    store8(ts_ptr + 15, 0);
 
     mov(x0, pfd);
     mov(x1, 1);        // nfds
@@ -342,13 +354,13 @@ fn net_poll_read(fd: i32, timeout_ms: i32) -> i32 {
     let ret: i32 = u64_to_i32(getreg(x0));
     if (ret <= 0) { return ret; }
 
-    let revents: i32 = (pfd[6] & 255) + ((pfd[7] & 255) * 256);
+    let revents: i32 = read_byte(pfd_ptr + 6) + (read_byte(pfd_ptr + 7) * 256);
     if ((revents & 1) == 0) { return -1; }
     return ret;
 }
 
 fn net_bytes_available(fd: i32) -> i32 {
-    let count_buf: str = "\0\0\0\0";
+    let count_buf: str = make_buffer(4);
     let count_ptr: u64 = ptr(count_buf);
     mov(x0, fd);
     mov(x1, 0x541B);   // FIONREAD on Linux
@@ -356,10 +368,10 @@ fn net_bytes_available(fd: i32) -> i32 {
     mov(x8, 29);       // SYS_ioctl
     syscall();
 
-    let b0: i32 = count_buf[0] & 255;
-    let b1: i32 = count_buf[1] & 255;
-    let b2: i32 = count_buf[2] & 255;
-    let b3: i32 = count_buf[3] & 255;
+    let b0: i32 = read_byte(count_ptr);
+    let b1: i32 = read_byte(count_ptr + 1);
+    let b2: i32 = read_byte(count_ptr + 2);
+    let b3: i32 = read_byte(count_ptr + 3);
     return b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216);
 }
 
@@ -407,6 +419,7 @@ fn net_listen_on(port: i32, backlog: i32) -> i32 {
 // Read a line from a socket (up to newline or max_len)
 fn net_read_line(fd: i32, max_len: i32) -> str {
     let buf: str = "\0";
+    let bp: u64 = ptr(buf);
     let out: str = "";
     let pos: i32 = 0;
     while (pos < max_len) {
@@ -417,11 +430,12 @@ fn net_read_line(fd: i32, max_len: i32) -> str {
         syscall();
         let nread: i32 = u64_to_i32(getreg(x0));
         if (nread <= 0) { break; }
-        if (buf[0] == '\n') { break; }
-        if (buf[0] == '\r') {
+        let ch: i32 = read_byte(bp);
+        if (ch == 10) { break; }
+        if (ch == 13) {
             // skip carriage return
         } else {
-            out = out + buf[0];
+            out = out + copy_bytes_raw(bp, 1);
         }
         pos = pos + 1;
     }
@@ -444,11 +458,7 @@ fn net_read_all(fd: i32, max_len: i32) -> str {
         syscall();
         let nr: i32 = u64_to_i32(getreg(x0));
         if (nr <= 0) { break; }
-        let i: i32 = 0;
-        while (i < nr) {
-            result = result + buf[i];
-            i = i + 1;
-        }
+        result = result + copy_bytes_raw(ptr(buf), nr);
         total = total + nr;
     }
     return result;

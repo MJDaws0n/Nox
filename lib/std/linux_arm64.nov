@@ -86,13 +86,15 @@ fn input(prompt: str, buf_len: i32 = 128) -> str {
     mov(x8, 63);       // SYS_read
     syscall();
     let nread: i32 = u64_to_i32(getreg(x0));
+    let bp: u64 = ptr(buf);
     let out: str = "";
     let i: i32 = 0;
     while (i < nread) {
-        if (buf[i] == '\n') {
+        let ch: i32 = read_byte(bp + i32_to_u64(i));
+        if (ch == 10) {
             break;
         }
-        out = out + buf[i];
+        out = out + copy_bytes_raw(bp + i32_to_u64(i), 1);
         i = i + 1;
     }
     return out;
