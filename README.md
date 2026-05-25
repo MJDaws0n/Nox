@@ -48,6 +48,7 @@ nox help
 Nox pulls packages from GitHub repositories into a `lib/` directory in your project. Each package gets its own folder using the **library name** (registry name), not the repository name.
 
 Installed packages are tracked in `libraries.conf` with version, branch, commit, and version constraint information.
+Nox resolves package source from GitHub archives, so end users do not need `git` installed.
 
 ### `nox init`
 
@@ -135,14 +136,46 @@ your-package@1.0.0=https://github.com/your-username/your-repo|main|<commit>
 
 | Flag | Description |
 |------|-------------|
-| `--no-depth` | Clone full git history instead of shallow (default: `--depth 1`) |
+| `--no-depth` | Retained for compatibility. GitHub archive pulls ignore it. |
 | `-v <version>` | Pull a specific version from the registry |
 | `-b <branch>` | Clone from a specific branch |
 | `-c <commit>` | Checkout a specific commit after cloning |
 
 ## Requirements
-- Git (installed via Xcode Command Line Tools)
+- `curl`
+- `tar` on macOS/Linux, or PowerShell `Expand-Archive` on Windows
 - Internet connection (for pulling packages and fetching registry)
+
+## Build Releases
+
+### macOS arm64
+
+```bash
+./build.sh
+```
+
+Outputs `dist/nox-darwin-arm64`.
+
+### Linux amd64 + arm64
+
+```bash
+./build-linux.sh
+```
+
+Outputs:
+
+```text
+dist/nox-linux-amd64
+dist/nox-linux-arm64
+```
+
+### Package tarballs
+
+```bash
+./package-release.sh
+```
+
+Outputs versioned tarballs and `.sha256` files in `dist/packages/`.
 
 ## Testing Requirements for Official Libraries
 
@@ -199,4 +232,4 @@ fn main(argc: i32, argv: u64) -> i32 {
 
 ## Built With
 
-Nox is written entirely in [Novus](https://github.com/MJDaws0n/Novus), the language it serves. It uses a folder-based library structure with cross-platform core modules and platform-specific implementations, and shells out to `git` for cloning and `curl` for fetching the registry.
+Nox is written entirely in [Novus](https://github.com/MJDaws0n/Novus), the language it serves. It uses a folder-based library structure with cross-platform core modules and platform-specific implementations, and shells out to `curl` plus platform archive tools to fetch packages directly from GitHub.

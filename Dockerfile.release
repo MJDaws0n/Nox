@@ -1,0 +1,28 @@
+FROM debian:bookworm-slim
+
+ARG NOVUS_VERSION=V0.1.7
+ARG NOVUS_TARGET=linux/arm64
+ARG NOVUS_OUTPUT_DIR=linux_arm64
+ARG NOVUS_BINARY_NAME=nox-linux-arm64
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    binutils \
+    ca-certificates \
+    curl \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN arch="$(dpkg --print-architecture)" \
+ && case "$arch" in \
+      amd64) novus_bin="novus-linux-amd64" ;; \
+      arm64) novus_bin="novus-linux-arm64" ;; \
+      *) echo "unsupported builder architecture: $arch" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL -o /usr/local/bin/novus "https://github.com/MJDaws0n/novus/releases/download/${NOVUS_VERSION}/${novus_bin}" \
+ && chmod +x /usr/local/bin/novus
+
+WORKDIR /src
+COPY . .
+
+RUN mkdir -p /out \
+ && novus --target="${NOVUS_TARGET}" main.nov \
+ && cp "build/${NOVUS_OUTPUT_DIR}/nox" "/out/${NOVUS_BINARY_NAME}"
