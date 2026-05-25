@@ -72,7 +72,10 @@ import lib/novus-std/lib/standard_lib;
 import lib/novus-std/lib/standard_lib_macos_silicon;
 import lib/maths/main;
 ```
-> **Note:** Due to a Novus compiler limitation (#if blocks in imported files don't export functions), platform selection requires manually changing the import in each loader. This will be automated once the compiler supports conditional exports.
+> **Note:** The platform shown in the import depends on your host OS. The
+> standard library (`std`) and most platform-aware libraries provide a
+> top-level `main.nov` loader that picks the right platform implementation
+> automatically — so user code just does `import lib/std std;`.
 
 ## libraries.conf
 When you pull packages, Nox automatically creates and maintains a `libraries.conf` file that tracks:
