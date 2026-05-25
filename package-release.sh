@@ -11,7 +11,7 @@ if [ -z "${VERSION}" ]; then
 fi
 
 mkdir -p dist/packages
-rm -f dist/packages/*
+rm -rf dist/packages/*
 
 package_one() {
   local bin_path="$1"
