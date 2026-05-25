@@ -12,7 +12,7 @@
 //   nox version               show version
 //
 // Flags:
-//   --no-depth                clone full git history (default: shallow)
+//   --no-depth                retained for compatibility; ignored for GitHub archive pulls
 //   -v <version>              pull a specific version from the registry
 //   -b <branch>               pull from a specific branch
 //   -c <commit>               checkout a specific commit after cloning
@@ -29,7 +29,7 @@ import lib/process;
 // ---------------------------------------------------------------------------
 
 fn get_version() -> str {
-    return "3.2.10";
+    return "3.3.0";
 }
 
 fn get_registry_url() -> str {
@@ -45,30 +45,30 @@ fn get_conf_name() -> str {
 // ---------------------------------------------------------------------------
 
 #if(os == "darwin") {
-    fn get_git_path() -> str { return "/usr/bin/git"; }
     fn get_curl_path() -> str { return "/usr/bin/curl"; }
     fn get_tmp_prefix() -> str { return "/tmp/"; }
     fn get_sh_path() -> str { return "/bin/sh"; }
     fn get_sh_flag() -> str { return "-c"; }
     fn get_rm_path() -> str { return "/bin/rm"; }
+    fn get_powershell_path() -> str { return "powershell"; }
     fn is_windows() -> bool { return false; }
 }
 #if(os == "windows") {
-    fn get_git_path() -> str { return "git"; }
     fn get_curl_path() -> str { return "curl"; }
     fn get_tmp_prefix() -> str { return ""; }
     fn get_sh_path() -> str { return "cmd.exe"; }
     fn get_sh_flag() -> str { return "/c"; }
     fn get_rm_path() -> str { return "cmd.exe"; }
+    fn get_powershell_path() -> str { return "powershell"; }
     fn is_windows() -> bool { return true; }
 }
 #if(os == "linux") {
-    fn get_git_path() -> str { return "/usr/bin/git"; }
     fn get_curl_path() -> str { return "/usr/bin/curl"; }
     fn get_tmp_prefix() -> str { return "/tmp/"; }
     fn get_sh_path() -> str { return "/bin/sh"; }
     fn get_sh_flag() -> str { return "-c"; }
     fn get_rm_path() -> str { return "/bin/rm"; }
+    fn get_powershell_path() -> str { return "powershell"; }
     fn is_windows() -> bool { return false; }
 }
 
@@ -77,8 +77,89 @@ fn get_conf_name() -> str {
 // format: pkg:Name:field=value lines, plus installed=A,B,C header
 // ---------------------------------------------------------------------------
 
+fn safe_starts_with(s: str, p: str) -> bool {
+    if (len(s) < len(p)) { return false; }
+    let i: i32 = 0;
+    let plen: i32 = len(p);
+    while (i < plen) {
+        if (s[i] != p[i]) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn safe_ends_with(s: str, p: str) -> bool {
+    let slen: i32 = len(s);
+    let plen: i32 = len(p);
+    if (slen < plen) { return false; }
+    let off: i32 = slen - plen;
+    let i: i32 = 0;
+    while (i < plen) {
+        if (s[off + i] != p[i]) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn safe_str_contains(s: str, needle: str) -> bool {
+    return safe_str_find(s, needle) >= 0;
+}
+
+fn safe_str_find(s: str, needle: str) -> i32 {
+    let slen: i32 = len(s);
+    let nlen: i32 = len(needle);
+    if (nlen == 0) { return 0; }
+    if (slen < nlen) { return -1; }
+
+    let limit: i32 = slen - nlen;
+    let i: i32 = 0;
+    while (i <= limit) {
+        let matched: bool = true;
+        let j: i32 = 0;
+        while (j < nlen) {
+            if (s[i + j] != needle[j]) {
+                matched = false;
+                j = nlen;
+            } else {
+                j = j + 1;
+            }
+        }
+        if (matched) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn safe_substr(s: str, start: i32) -> str {
+    let slen: i32 = len(s);
+    if (start >= slen) { return ""; }
+    let out: str = "";
+    let i: i32 = start;
+    while (i < slen) {
+        out = out + s[i];
+        i = i + 1;
+    }
+    return out;
+}
+
+fn safe_substr_len(s: str, start: i32, count: i32) -> str {
+    let slen: i32 = len(s);
+    if (start >= slen || count <= 0) { return ""; }
+    let max_count: i32 = count;
+    if (start + max_count > slen) {
+        max_count = slen - start;
+    }
+    let out: str = "";
+    let i: i32 = 0;
+    while (i < max_count) {
+        out = out + s[start + i];
+        i = i + 1;
+    }
+    return out;
+}
+
 fn conf_get_value(conf: str, key: str) -> str {
-    let pos: i32 = str_find(conf, key);
+    let pos: i32 = safe_str_find(conf, key);
     if (pos < 0) { return ""; }
     let start: i32 = pos + len(key);
     let val: str = "";
@@ -311,23 +392,66 @@ fn pipe_field(value: str, index: i32) -> str {
 // fetch the package registry from github using curl
 // ---------------------------------------------------------------------------
 
-fn fetch_registry() -> str {
-    let url: str = get_registry_url();
-    let tmp: str = get_tmp_prefix() + "nox_registry.txt";
-
+fn http_download(url: str, out_path: str) -> i32 {
     let curl: str = get_curl_path();
     let a1: str = "-s";
     let a2: str = "-f";
     let a3: str = "-L";
-    let a4: str = "-o";
-    let av: []u64 = [ptr(curl), ptr(a1), ptr(a2), ptr(a3), ptr(a4), ptr(tmp), ptr(url), 0];
+    let a4: str = "-H";
+    let a5: str = "User-Agent: nox";
+    let a6: str = "-o";
+    let av: []u64 = [ptr(curl), ptr(a1), ptr(a2), ptr(a3), ptr(a4), ptr(a5), ptr(a6), ptr(out_path), ptr(url), 0];
+    return run_cmd(curl, av);
+}
 
-    let status: i32 = run_cmd(curl, av);
+fn http_get_text(url: str, tmp_name: str) -> str {
+    let tmp: str = get_tmp_prefix() + tmp_name;
+    let status: i32 = http_download(url, tmp);
     if (status != 0) { return ""; }
-
     let content: str = read_file(tmp);
     file_delete(tmp);
     return content;
+}
+
+fn fetch_registry() -> str {
+    let url: str = get_registry_url();
+    return http_get_text(url, "nox_registry.txt");
+}
+
+fn json_get_string_value(json: str, key: str) -> str {
+    let marker: str = "\"" + key + "\"";
+    let pos: i32 = safe_str_find(json, marker);
+    if (pos < 0) { return ""; }
+
+    let i: i32 = pos + len(marker);
+    let jlen: i32 = len(json);
+    while (i < jlen && json[i] != ':') {
+        i = i + 1;
+    }
+    if (i >= jlen) { return ""; }
+
+    i = i + 1;
+    while (i < jlen && (json[i] == ' ' || json[i] == '\t' || json[i] == '\n' || json[i] == '\r')) {
+        i = i + 1;
+    }
+    if (i >= jlen || json[i] != '"') { return ""; }
+
+    i = i + 1;
+    let value: str = "";
+    while (i < jlen) {
+        if (json[i] == '\\' && i + 1 < jlen) {
+            i = i + 1;
+            value = value + json[i];
+            i = i + 1;
+            continue;
+        }
+        if (json[i] == '"') {
+            return value;
+        }
+        value = value + json[i];
+        i = i + 1;
+    }
+    return "";
 }
 
 // ---------------------------------------------------------------------------
@@ -352,11 +476,11 @@ fn registry_lookup(registry: str, name: str) -> str {
         if (len(line) == 0) { continue; }
         if (line[0] == '#') { continue; }
 
-        let eq_pos: i32 = str_find(line, "=");
+        let eq_pos: i32 = safe_str_find(line, "=");
         if (eq_pos < 0) { continue; }
 
-        let pkg_name: str = substr_len(line, 0, eq_pos);
-        let pkg_url: str = substr(line, eq_pos + 1);
+        let pkg_name: str = safe_substr_len(line, 0, eq_pos);
+        let pkg_url: str = safe_substr(line, eq_pos + 1);
 
         if (pkg_name == name) {
             return pkg_url;
@@ -371,6 +495,10 @@ fn registry_lookup(registry: str, name: str) -> str {
 // ---------------------------------------------------------------------------
 
 fn extract_repo_name(url: str) -> str {
+    if (safe_starts_with(url, "git@github.com:")) {
+        let suffix: str = safe_substr(url, 15);
+        return extract_repo_name("https://github.com/" + suffix);
+    }
     let last_slash: i32 = -1;
     let i: i32 = 0;
     let ulen: i32 = len(url);
@@ -380,124 +508,237 @@ fn extract_repo_name(url: str) -> str {
     }
     if (last_slash < 0) { return url; }
 
-    let name: str = substr(url, last_slash + 1);
+    let name: str = safe_substr(url, last_slash + 1);
 
-    if (ends_with(name, ".git")) {
-        name = substr_len(name, 0, len(name) - 4);
+    if (safe_ends_with(name, ".git")) {
+        name = safe_substr_len(name, 0, len(name) - 4);
     }
     if (len(name) > 0 && name[len(name) - 1] == '/') {
-        name = substr_len(name, 0, len(name) - 1);
+        name = safe_substr_len(name, 0, len(name) - 1);
     }
 
     return name;
 }
 
+fn normalize_github_url(url: str) -> str {
+    let out: str = url;
+    if (safe_starts_with(out, "git@github.com:")) {
+        out = "https://github.com/" + safe_substr(out, 15);
+    }
+    if (safe_starts_with(out, "github.com/")) {
+        out = "https://" + out;
+    }
+    if (safe_ends_with(out, ".git")) {
+        out = safe_substr_len(out, 0, len(out) - 4);
+    }
+    if (len(out) > 0 && out[len(out) - 1] == '/') {
+        out = safe_substr_len(out, 0, len(out) - 1);
+    }
+    return out;
+}
+
+fn slash_field(value: str, index: i32) -> str {
+    let current: i32 = 0;
+    let i: i32 = 0;
+    let vlen: i32 = len(value);
+    let field: str = "";
+    while (i <= vlen) {
+        if (i == vlen || value[i] == '/') {
+            if (current == index) { return field; }
+            current = current + 1;
+            field = "";
+        } else {
+            field = field + value[i];
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn github_repo_path(url: str) -> str {
+    let norm: str = normalize_github_url(url);
+    let prefix: str = "https://github.com/";
+    if (!safe_starts_with(norm, prefix)) { return ""; }
+    return safe_substr(norm, len(prefix));
+}
+
+fn github_owner(url: str) -> str {
+    return slash_field(github_repo_path(url), 0);
+}
+
+fn github_repo(url: str) -> str {
+    return slash_field(github_repo_path(url), 1);
+}
+
+fn github_api_repo_url(url: str) -> str {
+    let owner: str = github_owner(url);
+    let repo: str = github_repo(url);
+    if (len(owner) == 0 || len(repo) == 0) { return ""; }
+    return "https://api.github.com/repos/" + owner + "/" + repo;
+}
+
+fn github_default_branch(url: str) -> str {
+    let api: str = github_api_repo_url(url);
+    if (len(api) == 0) { return ""; }
+    let json: str = http_get_text(api, "nox_repo_meta.json");
+    if (len(json) == 0) { return ""; }
+    return json_get_string_value(json, "default_branch");
+}
+
+fn github_commit_for_ref(url: str, ref: str) -> str {
+    let api: str = github_api_repo_url(url);
+    if (len(api) == 0 || len(ref) == 0) { return ""; }
+    let json: str = http_get_text(api + "/commits/" + ref, "nox_repo_commit.json");
+    if (len(json) == 0) { return ""; }
+    return json_get_string_value(json, "sha");
+}
+
+fn remove_tree(path: str) -> i32 {
+    if (!file_exists(path)) { return 0; }
+    if (is_windows()) {
+        let sh: str = get_sh_path();
+        let c: str = get_sh_flag();
+        let cmd: str = "rmdir /s /q " + path;
+        let av: []u64 = [ptr(sh), ptr(c), ptr(cmd), 0];
+        return run_cmd(sh, av);
+    }
+
+    let rm: str = get_rm_path();
+    let a1: str = "-rf";
+    let av: []u64 = [ptr(rm), ptr(a1), ptr(path), 0];
+    return run_cmd(rm, av);
+}
+
+fn first_line(s: str) -> str {
+    let out: str = "";
+    let i: i32 = 0;
+    let slen: i32 = len(s);
+    while (i < slen) {
+        if (s[i] == '\n' || s[i] == '\r') { return out; }
+        out = out + s[i];
+        i = i + 1;
+    }
+    return out;
+}
+
+fn find_first_dir(path: str) -> str {
+    if (is_windows()) {
+        let ps: str = get_powershell_path();
+        let a1: str = "-NoProfile";
+        let a2: str = "-Command";
+        let script: str = "(Get-ChildItem -LiteralPath '" + path + "' -Directory | Select-Object -First 1).FullName";
+        let av: []u64 = [ptr(ps), ptr(a1), ptr(a2), ptr(script), 0];
+        return first_line(capture_output_full(ps, av, 4096));
+    }
+
+    let cmd: str = "find " + path + " -mindepth 1 -maxdepth 1 -type d | head -n 1";
+    return first_line(shell_output(cmd, 4096));
+}
+
+fn github_extract_archive(archive_path: str, extract_dir: str) -> i32 {
+    if (is_windows()) {
+        let ps: str = get_powershell_path();
+        let a1: str = "-NoProfile";
+        let a2: str = "-Command";
+        let script: str = "Expand-Archive -LiteralPath '" + archive_path + "' -DestinationPath '" + extract_dir + "' -Force";
+        let av: []u64 = [ptr(ps), ptr(a1), ptr(a2), ptr(script), 0];
+        return run_cmd(ps, av);
+    }
+
+    let sh: str = get_sh_path();
+    let c: str = get_sh_flag();
+    let cmd: str = "tar -xzf " + archive_path + " -C " + extract_dir;
+    let av: []u64 = [ptr(sh), ptr(c), ptr(cmd), 0];
+    return run_cmd(sh, av);
+}
+
+fn github_download_archive(url: str, dest: str, ref: str) -> i32 {
+    let owner: str = github_owner(url);
+    let repo: str = github_repo(url);
+    if (len(owner) == 0 || len(repo) == 0 || len(ref) == 0) { return 1; }
+
+    let base_tmp: str = get_tmp_prefix() + "nox_" + repo;
+    let archive_path: str = "";
+    let extract_dir: str = base_tmp + "_extract";
+    let archive_url: str = "";
+
+    if (is_windows()) {
+        archive_path = base_tmp + ".zip";
+        archive_url = "https://codeload.github.com/" + owner + "/" + repo + "/zip/" + ref;
+    } else {
+        archive_path = base_tmp + ".tar.gz";
+        archive_url = "https://codeload.github.com/" + owner + "/" + repo + "/tar.gz/" + ref;
+    }
+
+    remove_tree(dest);
+    remove_tree(extract_dir);
+    file_delete(archive_path);
+    sys_mkdir(extract_dir, 493);
+
+    let dl_status: i32 = http_download(archive_url, archive_path);
+    if (dl_status != 0) {
+        remove_tree(extract_dir);
+        return dl_status;
+    }
+
+    let ex_status: i32 = github_extract_archive(archive_path, extract_dir);
+    if (ex_status != 0) {
+        file_delete(archive_path);
+        remove_tree(extract_dir);
+        return ex_status;
+    }
+
+    let extracted: str = find_first_dir(extract_dir);
+    if (len(extracted) == 0) {
+        file_delete(archive_path);
+        remove_tree(extract_dir);
+        return 1;
+    }
+
+    let mv_status: i32 = file_rename(extracted, dest);
+    file_delete(archive_path);
+    remove_tree(extract_dir);
+    return mv_status;
+}
+
+fn resolve_source_metadata(url: str, branch: str, commit: str) -> str {
+    let resolved_branch: str = branch;
+    let resolved_commit: str = commit;
+
+    if (len(resolved_branch) == 0) {
+        resolved_branch = github_default_branch(url);
+    }
+
+    let commit_ref: str = resolved_branch;
+    if (len(commit) > 0) {
+        commit_ref = commit;
+    }
+
+    if (len(resolved_commit) == 0 && len(commit_ref) > 0) {
+        resolved_commit = github_commit_for_ref(url, commit_ref);
+    }
+
+    return resolved_branch + "|" + resolved_commit;
+}
+
 fn is_url(s: str) -> bool {
-    if (starts_with(s, "https://")) { return true; }
-    if (starts_with(s, "http://")) { return true; }
-    if (starts_with(s, "git@")) { return true; }
-    if (starts_with(s, "github.com/")) { return true; }
+    if (safe_starts_with(s, "https://")) { return true; }
+    if (safe_starts_with(s, "http://")) { return true; }
+    if (safe_starts_with(s, "git@")) { return true; }
+    if (safe_starts_with(s, "github.com/")) { return true; }
     return false;
 }
 
 fn is_safe_name(name: str) -> bool {
     if (len(name) == 0) { return false; }
-    if (str_contains(name, "..")) { return false; }
-    if (str_contains(name, "/")) { return false; }
+    if (safe_str_contains(name, "..")) { return false; }
+    if (safe_str_contains(name, "/")) { return false; }
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// git helpers
+// github source fetch helpers
 // ---------------------------------------------------------------------------
-
-fn do_clone_shallow(url: str, dest: str) -> i32 {
-    let git: str = get_git_path();
-    let a1: str = "clone";
-    let a2: str = "--depth";
-    let a3: str = "1";
-    let av: []u64 = [ptr(git), ptr(a1), ptr(a2), ptr(a3), ptr(url), ptr(dest), 0];
-    let result: i32 = run_cmd(git, av);
-    return result;
-}
-
-fn do_clone_shallow_branch(url: str, dest: str, branch: str) -> i32 {
-    let git: str = get_git_path();
-    let a1: str = "clone";
-    let a2: str = "--depth";
-    let a3: str = "1";
-    let a4: str = "--branch";
-    let av: []u64 = [ptr(git), ptr(a1), ptr(a2), ptr(a3), ptr(a4), ptr(branch), ptr(url), ptr(dest), 0];
-    return run_cmd(git, av);
-}
-
-fn do_clone_full(url: str, dest: str) -> i32 {
-    let git: str = get_git_path();
-    let a1: str = "clone";
-    let av: []u64 = [ptr(git), ptr(a1), ptr(url), ptr(dest), 0];
-    return run_cmd(git, av);
-}
-
-fn do_clone_full_branch(url: str, dest: str, branch: str) -> i32 {
-    let git: str = get_git_path();
-    let a1: str = "clone";
-    let a2: str = "--branch";
-    let av: []u64 = [ptr(git), ptr(a1), ptr(a2), ptr(branch), ptr(url), ptr(dest), 0];
-    return run_cmd(git, av);
-}
-
-fn do_checkout(dest: str, commit: str) -> i32 {
-    let git: str = get_git_path();
-    let a1: str = "-C";
-    let a2: str = "checkout";
-    let av: []u64 = [ptr(git), ptr(a1), ptr(dest), ptr(a2), ptr(commit), 0];
-    return run_cmd(git, av);
-}
-
-fn git_get_branch(dest: str) -> str {
-    let git: str = get_git_path();
-    let a1: str = "-C";
-    let a2: str = "rev-parse";
-    let a3: str = "--abbrev-ref";
-    let a4: str = "HEAD";
-    let av: []u64 = [ptr(git), ptr(a1), ptr(dest), ptr(a2), ptr(a3), ptr(a4), 0];
-    return capture_output(git, av, 256);
-}
-
-fn git_get_commit(dest: str) -> str {
-    let git: str = get_git_path();
-    let a1: str = "-C";
-    let a2: str = "rev-parse";
-    let a3: str = "HEAD";
-    let av: []u64 = [ptr(git), ptr(a1), ptr(dest), ptr(a2), ptr(a3), 0];
-    return capture_output(git, av, 256);
-}
-
-// clone with optional branch/commit, returns 0 on success
-fn smart_clone(url: str, dest: str, branch: str, commit: str, shallow: bool) -> i32 {
-    let use_shallow: bool = shallow;
-    if (len(commit) > 0) { use_shallow = false; }
-
-    let status: i32 = 0;
-
-    if (use_shallow && len(branch) > 0) {
-        status = do_clone_shallow_branch(url, dest, branch);
-    } else if (use_shallow) {
-        status = do_clone_shallow(url, dest);
-    } else if (len(branch) > 0) {
-        status = do_clone_full_branch(url, dest, branch);
-    } else {
-        status = do_clone_full(url, dest);
-    }
-
-    if (status != 0) { return status; }
-
-    if (len(commit) > 0) {
-        return do_checkout(dest, commit);
-    }
-
-    return 0;
-}
 
 // get version from a package's VERSION file, or "0.0.0"
 fn get_pkg_version(dest: str) -> str {
@@ -581,15 +822,18 @@ fn resolve_deps_from_manifest(owner_pkg: str, dep_conf: str, conf_in: str) -> st
             print("  pulling dependency: " + dep);
             let dest: str = "lib/" + dep;
 
-            let clone_status: i32 = smart_clone(dep_url, dest, dep_branch, dep_commit, true);
+            let dep_meta: str = resolve_source_metadata(dep_url, dep_branch, dep_commit);
+            let resolved_branch: str = pipe_field(dep_meta, 0);
+            let resolved_commit: str = pipe_field(dep_meta, 1);
+            let dep_ref: str = resolved_commit;
+            if (len(dep_ref) == 0) { dep_ref = resolved_branch; }
+            let clone_status: i32 = github_download_archive(dep_url, dest, dep_ref);
             if (clone_status == 0) {
-                let branch: str = git_get_branch(dest);
-                let commit: str = git_get_commit(dest);
                 let version: str = get_pkg_version(dest);
                 if (len(dep_ver) > 0 && dep_ver != "0.0.0") {
                     version = dep_ver;
                 }
-                conf = conf_add_package(conf, dep, dep_url, version, branch, commit, dep_min, dep_max);
+                conf = conf_add_package(conf, dep, dep_url, version, resolved_branch, resolved_commit, dep_min, dep_max);
                 print("  installed dependency: " + dep + " v" + version);
 
                 // recursively resolve this dep's deps
@@ -677,13 +921,13 @@ fn check_updates(registry: str, conf: str) -> void {
             if (line[0] == '#') { continue; }
 
             // find entries like "name=<pkg_url>" (without @ or :)
-            let eq: i32 = str_find(line, "=");
+            let eq: i32 = safe_str_find(line, "=");
             if (eq < 0) { continue; }
-            let lkey: str = substr_len(line, 0, eq);
-            let lval: str = substr(line, eq + 1);
+            let lkey: str = safe_substr_len(line, 0, eq);
+            let lval: str = safe_substr(line, eq + 1);
 
             // if this is a base entry matching our url
-            if (lval == pkg_url && !str_contains(lkey, "@") && !str_contains(lkey, ":")) {
+            if (lval == pkg_url && !safe_str_contains(lkey, "@") && !safe_str_contains(lkey, ":")) {
                 // found registry name, now look for :latest
                 let latest_val: str = registry_lookup(registry, lkey + ":latest");
                 if (len(latest_val) > 0 && inst_ver != "*") {
@@ -759,17 +1003,20 @@ fn pull_package(url: str, name: str, shallow: bool, branch: str, commit: str, ve
     }
     print("");
 
-    let clone_ok: i32 = smart_clone(url, dest, branch, commit, shallow);
+    let pull_meta: str = resolve_source_metadata(url, branch, commit);
+    let actual_branch: str = pipe_field(pull_meta, 0);
+    let actual_commit: str = pipe_field(pull_meta, 1);
+    let pull_ref: str = actual_commit;
+    if (len(pull_ref) == 0) { pull_ref = actual_branch; }
+
+    let clone_ok: i32 = github_download_archive(url, dest, pull_ref);
 
     if (clone_ok != 0) {
         print("");
-        print("error: git clone failed");
+        print("error: github download failed");
         return 1;
     }
 
-    // get actual branch and commit from the clone
-    let actual_branch: str = git_get_branch(dest);
-    let actual_commit: str = git_get_commit(dest);
     let actual_version: str = get_pkg_version(dest);
 
     // prefer explicitly requested version
@@ -875,15 +1122,15 @@ fn show_list() -> void {
         if (len(line) == 0) { continue; }
         if (line[0] == '#') { continue; }
 
-        let eq_pos: i32 = str_find(line, "=");
+        let eq_pos: i32 = safe_str_find(line, "=");
         if (eq_pos < 0) { continue; }
 
-        let pkg_name: str = substr_len(line, 0, eq_pos);
-        let pkg_url: str = substr(line, eq_pos + 1);
+        let pkg_name: str = safe_substr_len(line, 0, eq_pos);
+        let pkg_url: str = safe_substr(line, eq_pos + 1);
 
         // only show base entries (no @ or : in name)
-        if (str_contains(pkg_name, "@")) { continue; }
-        if (str_contains(pkg_name, ":")) { continue; }
+        if (safe_str_contains(pkg_name, "@")) { continue; }
+        if (safe_str_contains(pkg_name, ":")) { continue; }
 
         // look up latest version
         let latest: str = registry_lookup(registry, pkg_name + ":latest");
@@ -934,7 +1181,7 @@ fn show_check() -> void {
         let url: str = conf_get(conf, pkg, "url");
         let branch: str = conf_get(conf, pkg, "branch");
         let commit_full: str = conf_get(conf, pkg, "commit");
-        let commit_short: str = substr_len(commit_full, 0, 7);
+        let commit_short: str = safe_substr_len(commit_full, 0, 7);
         print("  " + pkg + "  v" + ver + "  " + branch + " " + commit_short);
         i = i + 1;
     }
@@ -1009,12 +1256,12 @@ fn update_all() -> i32 {
             if (len(line) == 0) { continue; }
             if (line[0] == '#') { continue; }
 
-            let eq: i32 = str_find(line, "=");
+            let eq: i32 = safe_str_find(line, "=");
             if (eq < 0) { continue; }
-            let lkey: str = substr_len(line, 0, eq);
-            let lval: str = substr(line, eq + 1);
+            let lkey: str = safe_substr_len(line, 0, eq);
+            let lval: str = safe_substr(line, eq + 1);
 
-            if (lval == pkg_url && !str_contains(lkey, "@") && !str_contains(lkey, ":")) {
+            if (lval == pkg_url && !safe_str_contains(lkey, "@") && !safe_str_contains(lkey, ":")) {
                 reg_name = lkey;
             }
         }
@@ -1067,10 +1314,7 @@ fn update_all() -> i32 {
 
         // remove old version
         let dest: str = "lib/" + pkg;
-        let rm: str = "/bin/rm";
-        let a1: str = "-rf";
-        let av: []u64 = [ptr(rm), ptr(a1), ptr(dest), 0];
-        let rm_status: i32 = run_cmd(rm, av);
+        let rm_status: i32 = remove_tree(dest);
 
         if (rm_status != 0) {
             print("    error: could not remove old " + pkg);
@@ -1080,7 +1324,13 @@ fn update_all() -> i32 {
         }
 
         // clone new version
-        let clone_ok: i32 = smart_clone(pull_url, dest, pull_branch, pull_commit, true);
+        let pull_meta: str = resolve_source_metadata(pull_url, pull_branch, pull_commit);
+        let actual_branch: str = pipe_field(pull_meta, 0);
+        let actual_commit: str = pipe_field(pull_meta, 1);
+        let pull_ref: str = actual_commit;
+        if (len(pull_ref) == 0) { pull_ref = actual_branch; }
+
+        let clone_ok: i32 = github_download_archive(pull_url, dest, pull_ref);
         if (clone_ok != 0) {
             print("    error: failed to pull " + pkg + " v" + latest_ver);
             failed = failed + 1;
@@ -1088,9 +1338,6 @@ fn update_all() -> i32 {
             continue;
         }
 
-        // update conf
-        let actual_branch: str = git_get_branch(dest);
-        let actual_commit: str = git_get_commit(dest);
         conf = conf_remove_package(conf, pkg);
         conf = conf_add_package(conf, pkg, pull_url, latest_ver, actual_branch, actual_commit, inst_min, inst_max);
 
@@ -1158,7 +1405,13 @@ fn install_missing_packages(conf_in: str, shallow: bool) -> str {
             let commit: str = conf_get(conf, pkg, "commit");
 
             print("installing missing package: " + pkg);
-            let st: i32 = smart_clone(url, dest, branch, commit, shallow);
+            let pull_meta: str = resolve_source_metadata(url, branch, commit);
+            let actual_branch: str = pipe_field(pull_meta, 0);
+            let actual_commit: str = pipe_field(pull_meta, 1);
+            let pull_ref: str = actual_commit;
+            if (len(pull_ref) == 0) { pull_ref = actual_branch; }
+
+            let st: i32 = github_download_archive(url, dest, pull_ref);
             if (st != 0) {
                 print("warning: failed to install '" + pkg + "'");
                 i = i + 1;
@@ -1252,10 +1505,10 @@ fn show_help() -> void {
     print("  nox version                    show version info");
     print("");
     print("flags:");
-    print("  --no-depth                     clone full git history (default: shallow)");
+    print("  --no-depth                     retained for compatibility (archive pulls ignore it)");
     print("  -v <version>                   pull a specific version from the registry");
-    print("  -b <branch>                    clone a specific branch");
-    print("  -c <commit>                    checkout a specific commit after cloning");
+    print("  -b <branch>                    pull a specific branch");
+    print("  -c <commit>                    pull a specific commit");
     print("");
     print("examples:");
     print("  nox pull std");
@@ -1361,7 +1614,7 @@ fn main(argc: i32, argv: u64) -> i32 {
 
         // if target looks like a url, pull directly
         if (is_url(target)) {
-            if (starts_with(target, "github.com/")) {
+            if (safe_starts_with(target, "github.com/")) {
                 target = "https://" + target;
             }
             let pull_result: i32 = pull_package(target, "", shallow, pull_branch, pull_commit, pull_version);
@@ -1409,6 +1662,20 @@ fn main(argc: i32, argv: u64) -> i32 {
         }
 
         // no version specified, pull latest
+        let latest_ver: str = registry_lookup(registry, target + ":latest");
+        if (len(latest_ver) > 0) {
+            let latest_val: str = registry_lookup(registry, target + "@" + latest_ver);
+            if (len(latest_val) > 0) {
+                let latest_url: str = pipe_field(latest_val, 0);
+                let latest_branch: str = pipe_field(latest_val, 1);
+                let latest_commit: str = pipe_field(latest_val, 2);
+                if (len(pull_branch) == 0) { pull_branch = latest_branch; }
+                if (len(pull_commit) == 0) { pull_commit = latest_commit; }
+                let result: i32 = pull_package(latest_url, target, shallow, pull_branch, pull_commit, latest_ver);
+                return result;
+            }
+        }
+
         let url: str = registry_lookup(registry, target);
 
         if (len(url) == 0) {

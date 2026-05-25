@@ -1,26 +1,27 @@
 #!/bin/bash
-# Build Nox - the Novus package manager
-# Requires the novus compiler binary in the current directory
+# Build macOS arm64 release binary for Nox.
 
 set -e
 
-if [ ! -f "./novus" ]; then
-    echo "error: novus compiler not found"
-    echo "download it from https://github.com/MJDaws0n/Novus"
+if ! command -v novus >/dev/null 2>&1; then
+    echo "error: novus compiler not found in PATH"
+    echo "install it from https://github.com/MJDaws0n/Novus"
     exit 1
 fi
 
-chmod +x ./novus
+mkdir -p dist
 
-echo "building nox..."
-./novus main.nov
+echo "building nox for darwin/arm64..."
+novus --target=darwin/arm64 main.nov
 
 if [ -f "./build/darwin_arm64/nox" ]; then
+    cp "./build/darwin_arm64/nox" "./dist/nox-darwin-arm64"
+    chmod +x "./dist/nox-darwin-arm64"
     echo ""
     echo "build successful!"
-    echo "binary: ./build/darwin_arm64/nox"
+    echo "binary: ./dist/nox-darwin-arm64"
     echo ""
-    echo "to install globally:"
+    echo "to install globally on macOS:"
     echo "  ./install.sh"
 else
     echo ""
