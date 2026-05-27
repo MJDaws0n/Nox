@@ -28,7 +28,8 @@ maths@1.0.1=https://github.com/MJDaws0n/novus-maths|main|
 
 # Media Tools
 media_tools=https://github.com/MJDaws0n/novus-media-tools
-media_tools:latest=1.0.0
+media_tools:latest=1.0.1
+media_tools@1.0.1=https://github.com/MJDaws0n/novus-media-tools|main|2008a46bbe0d3bd50765fe3db5d83a5afb52a68e
 media_tools@1.0.0=https://github.com/MJDaws0n/novus-media-tools|main|16f1bfba95f0fa2bc33d0f426c3e16efc4208afb
 
 # Physics
