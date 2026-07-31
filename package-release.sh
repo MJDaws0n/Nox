@@ -21,8 +21,10 @@ package_one() {
     return
   fi
 
-  local stage="dist/packages/${label}"
-  local archive="dist/packages/${label}.tar.gz"
+  local package_dir="dist/packages"
+  local archive_name="${label}.tar.gz"
+  local stage="${package_dir}/${label}"
+  local archive="${package_dir}/${archive_name}"
 
   rm -rf "$stage"
   mkdir -p "$stage"
@@ -30,9 +32,9 @@ package_one() {
   chmod +x "$stage/nox"
   tar -czf "$archive" -C "$stage" nox
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$archive" > "${archive}.sha256"
+    (cd "$package_dir" && sha256sum "$archive_name" > "${archive_name}.sha256")
   else
-    shasum -a 256 "$archive" > "${archive}.sha256"
+    (cd "$package_dir" && shasum -a 256 "$archive_name" > "${archive_name}.sha256")
   fi
 }
 
