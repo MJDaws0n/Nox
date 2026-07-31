@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-VERSION="${VERSION:-$(./build/darwin_arm64/nox version 2>/dev/null | tail -n 1 | sed 's/^nox v//')}"
+VERSION="${VERSION:-$(sed -n '/fn get_version()/,/}/s/.*return "\([^"]*\)".*/\1/p' main.nov | head -n 1)}"
 
 if [ -z "${VERSION}" ]; then
   echo "error: could not determine version"
@@ -29,7 +29,11 @@ package_one() {
   cp "$bin_path" "$stage/nox"
   chmod +x "$stage/nox"
   tar -czf "$archive" -C "$stage" nox
-  shasum -a 256 "$archive" > "${archive}.sha256"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$archive" > "${archive}.sha256"
+  else
+    shasum -a 256 "$archive" > "${archive}.sha256"
+  fi
 }
 
 package_one dist/nox-darwin-arm64 "nox-v${VERSION}-darwin-arm64"

@@ -29,7 +29,7 @@ import lib/process;
 // ---------------------------------------------------------------------------
 
 fn get_version() -> str {
-    return "3.4.0";
+    return "3.4.1";
 }
 
 fn get_registry_url() -> str {
@@ -445,7 +445,8 @@ fn pipe_field(value: str, index: i32) -> str {
 
 fn http_download(url: str, out_path: str) -> i32 {
     let curl: str = get_curl_path();
-    let a1: str = "-s";
+    // Keep normal downloads quiet, but show curl's diagnostic on failure.
+    let a1: str = "-sS";
     let a2: str = "-f";
     let a3: str = "-L";
     let a4: str = "-H";
@@ -728,6 +729,7 @@ fn github_download_archive(url: str, dest: str, ref: str) -> i32 {
 
     let dl_status: i32 = http_download(archive_url, archive_path);
     if (dl_status != 0) {
+        print("error: could not download " + archive_url);
         remove_tree(extract_dir);
         return dl_status;
     }

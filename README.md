@@ -3,14 +3,24 @@
 The package manager for the [Novus](https://github.com/MJDaws0n/Novus) programming language.
 
 ## Quick install
-1. Download the latest version from the realeases tab
-2. Run the following command to install gobally (macos) (replace nox_download with the directy of the executable)
-    ```sh
-    sudo cp "nox_download" /usr/local/bin/nox
-    sudo chmod +x /usr/local/bin/nox
-    sudo xattr -d com.apple.quarantine /usr/local/bin/nox
-    ```
-3. Run `nox help` to get started
+
+Automatic installation on Linux or macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/MJDaws0n/Nox/main/install.sh | bash
+```
+
+For a manual installation, download the correct binary from the
+[releases page](https://github.com/MJDaws0n/Nox/releases), then run:
+
+```sh
+sudo cp nox-<os>-<arch> /usr/local/bin/nox
+sudo chmod +x /usr/local/bin/nox
+# macOS only:
+sudo xattr -d com.apple.quarantine /usr/local/bin/nox
+```
+
+Run `nox help` to get started.
 
 ## Usage
 
