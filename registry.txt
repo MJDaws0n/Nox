@@ -45,7 +45,8 @@ net@1.0.3=https://github.com/MJDaws0n/novus-net|main|
 
 # Process
 process=https://github.com/MJDaws0n/novus-process
-process:latest=1.0.3
+process:latest=1.0.4
+process@1.0.4=https://github.com/MJDaws0n/novus-process|main|c44a75baea3aac5941e2079af6c961aec62c4c2c
 process@1.0.3=https://github.com/MJDaws0n/novus-process|main|
 
 # STD
