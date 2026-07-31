@@ -29,7 +29,7 @@ import lib/process;
 // ---------------------------------------------------------------------------
 
 fn get_version() -> str {
-    return "3.4.1";
+    return "3.4.2";
 }
 
 fn get_registry_url() -> str {
@@ -697,11 +697,14 @@ fn github_extract_archive(archive_path: str, extract_dir: str) -> i32 {
         return run_cmd(ps, av);
     }
 
-    let sh: str = get_sh_path();
-    let c: str = get_sh_flag();
-    let cmd: str = "tar -xzf " + archive_path + " -C " + extract_dir;
-    let av: []u64 = [ptr(sh), ptr(c), ptr(cmd), 0];
-    return run_cmd(sh, av);
+    // Extract directly into the destination and discard GitHub's top-level
+    // archive directory. Passing arguments directly avoids shell parsing.
+    let tar: str = "/usr/bin/tar";
+    let a1: str = "-xzf";
+    let a2: str = "-C";
+    let a3: str = "--strip-components=1";
+    let av: []u64 = [ptr(tar), ptr(a1), ptr(archive_path), ptr(a2), ptr(extract_dir), ptr(a3), 0];
+    return run_cmd(tar, av);
 }
 
 fn github_download_archive(url: str, dest: str, ref: str) -> i32 {
@@ -722,23 +725,46 @@ fn github_download_archive(url: str, dest: str, ref: str) -> i32 {
         archive_url = "https://codeload.github.com/" + owner + "/" + repo + "/tar.gz/" + ref;
     }
 
-    remove_tree(dest);
-    remove_tree(extract_dir);
+    let cleanup_status: i32 = remove_tree(dest);
+    if (cleanup_status != 0) {
+        print("error: could not prepare destination " + dest);
+        return cleanup_status;
+    }
     file_delete(archive_path);
-    sys_mkdir(extract_dir, 493);
+
+    let extraction_target: str = dest;
+    if (is_windows()) {
+        remove_tree(extract_dir);
+        sys_mkdir(extract_dir, 493);
+        extraction_target = extract_dir;
+    } else {
+        let mkdir_status: i32 = sys_mkdir(dest, 493);
+        if (mkdir_status != 0) {
+            print("error: could not create destination " + dest);
+            return mkdir_status;
+        }
+    }
 
     let dl_status: i32 = http_download(archive_url, archive_path);
     if (dl_status != 0) {
         print("error: could not download " + archive_url);
-        remove_tree(extract_dir);
+        remove_tree(extraction_target);
         return dl_status;
     }
 
-    let ex_status: i32 = github_extract_archive(archive_path, extract_dir);
+    let ex_status: i32 = github_extract_archive(archive_path, extraction_target);
     if (ex_status != 0) {
+        print("error: could not extract package archive");
         file_delete(archive_path);
-        remove_tree(extract_dir);
+        remove_tree(extraction_target);
         return ex_status;
+    }
+
+    // POSIX tar extracts straight into lib/<package>. This works even when
+    // /tmp and the project are on different filesystems.
+    if (!is_windows()) {
+        file_delete(archive_path);
+        return 0;
     }
 
     let extracted: str = find_first_dir(extract_dir);
@@ -749,6 +775,9 @@ fn github_download_archive(url: str, dest: str, ref: str) -> i32 {
     }
 
     let mv_status: i32 = file_rename(extracted, dest);
+    if (mv_status != 0) {
+        print("error: could not move extracted package to " + dest);
+    }
     file_delete(archive_path);
     remove_tree(extract_dir);
     return mv_status;
@@ -1070,7 +1099,7 @@ fn pull_package_with_source(url: str, name: str, shallow: bool, branch: str, com
 
     if (clone_ok != 0) {
         print("");
-        print("error: github download failed");
+        print("error: github package installation failed");
         return 1;
     }
 
