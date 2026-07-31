@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-NOVUS_VERSION="${NOVUS_VERSION:-V0.1.8}"
+NOVUS_VERSION="${NOVUS_VERSION:-v0.2.3}"
 
 mkdir -p dist
 rm -f dist/nox-linux-amd64 dist/nox-linux-arm64
