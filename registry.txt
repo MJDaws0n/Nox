@@ -84,7 +84,8 @@ window@1.0.2=https://github.com/MJDaws0n/novus-window|main|
 
 # HTTP
 http=https://github.com/MJDaws0n/novus-http
-http:latest=1.0.4
+http:latest=1.0.5
+http@1.0.5=https://github.com/MJDaws0n/novus-http|main|347d078d29e3aaf9de2351ce9817f5e1db5c8569
 http@1.0.2=https://github.com/MJDaws0n/novus-http|main|
 
 # MySQL-Interact
